@@ -69,3 +69,13 @@ env/
 *.db
 *.sqlite3
 !data/sumeru_demo_corpus.json
+
+*/tests
+tests/
+data/
+
+# Research docs and artifacts
+research_docs/
+
+# Local crawl cache files
+*cache.json
