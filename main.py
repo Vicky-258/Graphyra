@@ -1,31 +1,27 @@
+import os
 from storage.sqlite_storage import SQLiteStorage
-
-from storage.entity_repository import EntityRepository
-
-from utils.entity_type import EntityType
+from utils.seed_db import seed_database
+from engine import Graphyra
 
 
-storage = SQLiteStorage("graphyra.db")
+def main():
+    db_file = "graphyra.db"
+    storage = SQLiteStorage(db_file)
+    storage.initialize_database()
 
-storage.initialize_database()
+    # Seed the database
+    corpus_file = os.path.join("data", "sumeru_demo_corpus.json")
+    seed_database(storage, corpus_file)
 
-entity_repo = EntityRepository(storage)
+    # Initialize Graphyra Traversal Engine
+    graphyra = Graphyra(storage)
 
-nahida = entity_repo.create(
-    canonical_name="Nahida",
-    entity_type=EntityType.PERSON
-)
+    # Trigger Reasoning Trace
+    question = "Who taught Nahida about Irminsul?"
+    print(f"--- Running Reasoning Trace for: \"{question}\" ---\n")
+    graphyra.explain(question)
+    print()
 
-print(nahida)
 
-loaded = entity_repo.get(
-    nahida.id
-)
-
-print(loaded)
-
-found = entity_repo.find_by_name(
-    "Nahida"
-)
-
-print(found)
+if __name__ == "__main__":
+    main()

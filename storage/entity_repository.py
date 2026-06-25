@@ -80,12 +80,7 @@ class EntityRepository:
             if row is None:
                 return None
 
-            return Entity(
-                id=row[0],
-                canonical_name=row[1],
-                entity_type=EntityType(row[2]),
-                metadata=json.loads(row[3] or "{}")
-            )
+            return self._row_to_entity(row)
 
     def find_by_name(self, name: str):
 
@@ -111,9 +106,36 @@ class EntityRepository:
             if row is None:
                 return None
 
-            return Entity(
-                id=row[0],
-                canonical_name=row[1],
-                entity_type=EntityType(row[2]),
-                metadata=json.loads(row[3] or "{}")
-            )
+            return self._row_to_entity(row)
+
+    def list_all(self):
+
+        with self.storage.get_connection() as conn:
+
+            cursor = conn.cursor()
+
+            cursor.execute("""
+            SELECT
+                id,
+                canonical_name,
+                entity_type,
+                metadata
+            FROM entities
+            """)
+
+            rows = cursor.fetchall()
+
+            return [
+                self._row_to_entity(row)
+                for row in rows
+            ]
+
+    def _row_to_entity(self, row):
+        if row is None:
+            return None
+        return Entity(
+            id=row[0],
+            canonical_name=row[1],
+            entity_type=EntityType(row[2]),
+            metadata=json.loads(row[3] or "{}")
+        )

@@ -110,6 +110,24 @@ class SQLiteStorage:
             """)
 
             # -------------------------
+            # Artifact Links
+            # -------------------------
+
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS artifact_links (
+                source_artifact_id TEXT NOT NULL,
+                target_artifact_id TEXT NOT NULL,
+                PRIMARY KEY (source_artifact_id, target_artifact_id),
+                FOREIGN KEY (source_artifact_id)
+                    REFERENCES artifacts(id)
+                    ON DELETE CASCADE,
+                FOREIGN KEY (target_artifact_id)
+                    REFERENCES artifacts(id)
+                    ON DELETE CASCADE
+            )
+            """)
+
+            # -------------------------
             # Indexes
             # -------------------------
 
@@ -126,6 +144,16 @@ class SQLiteStorage:
             cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_mentions_chunk
             ON entity_mentions(chunk_id)
+            """)
+
+            cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_artifact_links_source
+            ON artifact_links(source_artifact_id)
+            """)
+
+            cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_artifact_links_target
+            ON artifact_links(target_artifact_id)
             """)
 
             conn.commit()

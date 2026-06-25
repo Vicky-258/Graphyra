@@ -1,0 +1,82 @@
+[
+  {
+    "title": "Nahida",
+    "entity_type": "PERSON",
+    "source_type": "handcrafted",
+    "source": "sumeru_lore",
+    "content": "Nahida is the current Dendro Archon and the vessel of Lesser Lord Kusanali. She resides in Sumeru City within the nation of Sumeru, where she governs. Following the departure of Greater Lord Rukkhadevata, Nahida was placed under confinement inside the Sanctuary of Surasthana by the Akademiya. She has a deep connection to Irminsul, the silver world tree that stores Teyvat's memories. The Traveler helped free her from confinement and works with her to solve the crises of Sumeru.",
+    "outgoing_links": ["Greater Lord Rukkhadevata", "Sumeru", "Traveler", "Sumeru Akademiya"]
+  },
+  {
+    "title": "Greater Lord Rukkhadevata",
+    "entity_type": "PERSON",
+    "source_type": "handcrafted",
+    "source": "sumeru_lore",
+    "content": "Greater Lord Rukkhadevata was the former Dendro Archon of Sumeru who preceded Nahida. She was a legendary figure who created the Akasha System to harvest human wisdom for Teyvat's protection. Rukkhadevata died protecting Irminsul from the infection of Forbidden Knowledge, which threatened to corrupt the world's memory tree. Her final task was to create Nahida as a pure branch of Irminsul to succeed her.",
+    "outgoing_links": ["Nahida", "Irminsul", "Akasha System", "Forbidden Knowledge"]
+  },
+  {
+    "title": "Irminsul",
+    "entity_type": "LOCATION",
+    "source_type": "handcrafted",
+    "source": "sumeru_lore",
+    "content": "Irminsul is a mystical silver world tree whose roots stretch throughout Teyvat. It is located deep beneath Sumeru and acts as the repository of all knowledge, memories, and history in the world. Any changes to Irminsul will rewrite Teyvat's history. It is highly sensitive to Forbidden Knowledge, which corrupts its roots. Greater Lord Rukkhadevata and Nahida have both dedicated their lives to protecting Irminsul from corruption.",
+    "outgoing_links": ["Sumeru", "Forbidden Knowledge"]
+  },
+  {
+    "title": "Akasha System",
+    "entity_type": "CONCEPT",
+    "source_type": "handcrafted",
+    "source": "sumeru_lore",
+    "content": "The Akasha System is a massive information network created by Greater Lord Rukkhadevata. Operated by the Sumeru Akademiya, the Akasha distributes wisdom to the people of Sumeru through leaf-like ear-pieces. The system works by harvesting citizen dreams to calculate answers. Following the Dendro Archon's rescue, Nahida decided to shut down the Akasha System permanently to return Teyvat's dreams to its people.",
+    "outgoing_links": ["Greater Lord Rukkhadevata", "Sumeru Akademiya", "Sumeru", "Nahida"]
+  },
+  {
+    "title": "Sumeru",
+    "entity_type": "LOCATION",
+    "source_type": "handcrafted",
+    "source": "sumeru_lore",
+    "content": "Sumeru is the Nation of Wisdom located in Teyvat, governed by the Dendro Archon. It is divided into two distinct regions: the lush Sumeru rainforest and the vast Sumeru desert. The desert was once ruled by King Deshret, while the rainforest is home to Sumeru City and the Sumeru Akademiya. Historically, Sumeru was co-ruled by Greater Lord Rukkhadevata, King Deshret, and the Goddess of Flowers.",
+    "outgoing_links": ["Sumeru Akademiya", "King Deshret"]
+  },
+  {
+    "title": "Traveler",
+    "entity_type": "PERSON",
+    "source_type": "handcrafted",
+    "source": "sumeru_lore",
+    "content": "The Traveler is an outlander from another world who is searching for their lost sibling across Teyvat. Upon arriving in Sumeru, the Traveler gets entangled in the conspiracies of the Sumeru Akademiya and the Fatui. Working alongside allies like Nahida, the Traveler successfully frees the Dendro Archon from the Sanctuary of Surasthana and helps cleanse Irminsul from Forbidden Knowledge.",
+    "outgoing_links": ["Nahida", "Sumeru", "Forbidden Knowledge"]
+  },
+  {
+    "title": "Il Dottore",
+    "entity_type": "PERSON",
+    "source_type": "handcrafted",
+    "source": "sumeru_lore",
+    "content": "Il Dottore, also known as The Doctor, is the second of the Fatui Harbingers. In his youth, he was expelled from the Sumeru Akademiya for his unorthodox and dangerous research on mechanical augmentation and human experimentation. He returns to Sumeru to collaborate with the Akademiya sages in creating an artificial god. However, Nahida ultimately negotiates with Dottore, forcing him to destroy all of his temporal clones.",
+    "outgoing_links": ["Sumeru Akademiya", "Nahida"]
+  },
+  {
+    "title": "Sumeru Akademiya",
+    "entity_type": "ORGANIZATION",
+    "source_type": "handcrafted",
+    "source": "sumeru_lore",
+    "content": "The Sumeru Akademiya is the premier institution of learning in Teyvat and the governing body of Sumeru. The Akademiya is split into Six Darshans representing different fields of science. Sages of the Akademiya managed the Akasha System and conspired with Il Dottore to imprison Nahida, believing her to be too young and weak to lead the nation. They sought to replace her with a new, artificial god.",
+    "outgoing_links": ["Sumeru", "Akasha System", "Nahida", "Il Dottore"]
+  },
+  {
+    "title": "Forbidden Knowledge",
+    "entity_type": "CONCEPT",
+    "source_type": "handcrafted",
+    "source": "sumeru_lore",
+    "content": "Forbidden Knowledge is an alien corruption that originates from outside Teyvat, beyond the laws of the Heavenly Principles. When introduced to Teyvat, it causes madness, the Eleazar disease, and corrupts Irminsul. Greater Lord Rukkhadevata sacrificed herself to contain it, and King Deshret's civilization collapsed trying to harness it. Cleansing Forbidden Knowledge from Irminsul is essential to saving Sumeru.",
+    "outgoing_links": ["Irminsul", "Greater Lord Rukkhadevata", "King Deshret"]
+  },
+  {
+    "title": "King Deshret",
+    "entity_type": "PERSON",
+    "source_type": "handcrafted",
+    "source": "sumeru_lore",
+    "content": "King Deshret, also known as Al-Ahmar, was the ancient god who ruled the Sumeru desert civilization. He sought to create a utopia for his people by harnessing Forbidden Knowledge, which unfortunately triggered a plague of madness across his desert kingdom. To stop the corruption, King Deshret sacrificed himself, while Greater Lord Rukkhadevata helped build oasis sanctuaries to save the survivors.",
+    "outgoing_links": ["Sumeru", "Forbidden Knowledge", "Greater Lord Rukkhadevata"]
+  }
+]

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Graphyra — Graph-Constrained Retrieval Engine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo">
+                <span class="logo-icon">⎔</span>
+                <span class="logo-text">Graphyra</span>
+            </div>
+            <p class="tagline">Graph-constrained knowledge retrieval engine</p>
+        </header>
+
+        <!-- Search Section -->
+        <section class="search-section">
+            <div class="search-card">
+                <form id="query-form" class="search-form">
+                    <input 
+                        type="text" 
+                        id="query-input" 
+                        placeholder="Ask a question about Sumeru lore..." 
+                        autocomplete="off"
+                        required
+                    >
+                    <button type="submit" id="search-btn">
+                        <span class="btn-text">Retrieve</span>
+                        <span class="btn-spinner" style="display: none;">⟳</span>
+                    </button>
+                </form>
+                <div class="suggestions">
+                    <span class="suggestion-label">Try asking:</span>
+                    <button class="suggestion-tag" data-q="Who taught Nahida about Irminsul?">Who taught Nahida about Irminsul?</button>
+                    <button class="suggestion-tag" data-q="How does the Akasha System work?">How does the Akasha System work?</button>
+                    <button class="suggestion-tag" data-q="Tell me about Il Dottore">Tell me about Il Dottore</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Loading indicator -->
+        <div id="loading" class="loading-state" style="display: none;">
+            <div class="spinner"></div>
+            <p>Traversing knowledge graph...</p>
+        </div>
+
+        <!-- Results Section -->
+        <main id="results-panel" class="results-panel" style="display: none;">
+            
+            <!-- Question Card -->
+            <div class="question-header-card">
+                <span class="question-icon">⚡</span>
+                <div class="question-info">
+                    <div class="section-label">User Query</div>
+                    <h2 id="result-question" class="question-display"></h2>
+                </div>
+            </div>
+
+            <!-- Narrative Timeline -->
+            <div class="timeline-container">
+                <div class="timeline-line"></div>
+
+                <!-- Step 1: Parsing Clues -->
+                <div class="timeline-item">
+                    <div class="timeline-marker">1</div>
+                    <div class="timeline-content">
+                        <h3 class="step-title">Step 1: Identifying the Clues</h3>
+                        <p class="step-narrative" id="step-1-narrative">Scanning your question to extract key entities (names, locations, and concepts)...</p>
+                        <div id="detected-entities" class="badge-container"></div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Anchor Resolution -->
+                <div class="timeline-item">
+                    <div class="timeline-marker">2</div>
+                    <div class="timeline-content">
+                        <h3 class="step-title">Step 2: Finding Where to Start</h3>
+                        <p class="step-narrative" id="step-2-narrative">Opening the main records corresponding to our clues to start the investigation...</p>
+                        <div id="resolved-artifacts" class="badge-container"></div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Graph Traversal -->
+                <div class="timeline-item">
+                    <div class="timeline-marker">3</div>
+                    <div class="timeline-content">
+                        <h3 class="step-title">Step 3: Following the Link Trail</h3>
+                        <p class="step-narrative" id="step-3-narrative">Walking the reference links between wiki documents to build a traversal route...</p>
+                        <div class="graph-viewport">
+                            <div id="traversal-graph" class="graph-nodes-container"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 4: Evidence Collection -->
+                <div class="timeline-item">
+                    <div class="timeline-marker">4</div>
+                    <div class="timeline-content">
+                        <h3 class="step-title">Step 4: Reviewing the Evidence</h3>
+                        <p class="step-narrative" id="step-4-narrative">Compiling the exact paragraph chunks from the visited documents to extract answers...</p>
+                        <div id="evidence-chunks" class="chunks-container"></div>
+                    </div>
+                </div>
+
+                <!-- Step 5: Synthesized Answer -->
+                <div class="timeline-item answer-item">
+                    <div class="timeline-marker answer-marker">5</div>
+                    <div class="timeline-content">
+                        <h3 class="step-title">Step 5: The Final Solution</h3>
+                        <p class="step-narrative" id="step-5-narrative">Putting all clues and traversed details together into a cohesive explanation.</p>
+                        <div class="answer-card">
+                            <p id="synthesized-answer" class="answer-text"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+    </div>
+    <script src="/app.js"></script>
+</body>
+</html>
