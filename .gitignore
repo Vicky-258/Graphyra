@@ -79,3 +79,7 @@ research_docs/
 
 # Local crawl cache files
 *cache.json
+
+# SQLite temporary journaling files
+*.db-shm
+*.db-wal

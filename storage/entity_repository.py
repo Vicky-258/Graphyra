@@ -13,12 +13,13 @@ class EntityRepository:
         self,
         canonical_name: str,
         entity_type: EntityType,
-        metadata: dict | None = None
+        metadata: dict | None = None,
+        id: str | None = None
     ):
 
         metadata = metadata or {}
 
-        entity_id = self.storage.generate_id(
+        entity_id = id or self.storage.generate_id(
             "entities",
             "ENT"
         )

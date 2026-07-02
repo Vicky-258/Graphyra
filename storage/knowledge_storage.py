@@ -83,3 +83,14 @@ class KnowledgeStorage(ABC):
     @abstractmethod
     def get_relations(self, source_id=None):
         pass
+
+
+    # ---------- Evidence / Provenance ----------
+
+    @abstractmethod
+    def add_evidence(self, evidence):
+        pass
+
+    @abstractmethod
+    def get_evidence(self, entity_id=None, relation_id=None):
+        pass

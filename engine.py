@@ -2,15 +2,33 @@ import networkx as nx
 from utils.graph_builder import GraphBuilder
 from storage.entity_repository import EntityRepository
 from storage.artifact_repository import ArtifactRepository
+from storage.anchor_resolver import AnchorResolver
+from storage.alias_manager import AliasManager
+from models.traversal_models import TraversalRequest, TraversalPolicy
+from traversal_engine import TraversalEngine
+from storage.graph_repository import SQLiteGraphRepository
+from storage.evidence_retriever import EvidenceRetriever
+from subgraph_builder import SubgraphBuilder
 
 
 class Graphyra:
 
-    def __init__(self, storage):
+    def __init__(
+        self,
+        storage,
+        embedding_engine=None,
+        vector_index=None,
+        fusion_engine=None
+    ):
         self.storage = storage
         self.entity_repo = EntityRepository(storage)
         self.artifact_repo = ArtifactRepository(storage)
         self.graph_builder = GraphBuilder(storage)
+        self.anchor_resolver = AnchorResolver(storage)
+        self.alias_manager = AliasManager(storage)
+        self.embedding_engine = embedding_engine
+        self.vector_index = vector_index
+        self.fusion_engine = fusion_engine
 
     def explore(self, entity_name: str, max_depth: int = 2) -> dict:
         """
@@ -18,7 +36,7 @@ class Graphyra:
         Uses depth-limited BFS along artifact connection links.
         """
         # 1. Resolve Entity Name to Entity
-        entity = self.entity_repo.find_by_name(entity_name)
+        entity = self.anchor_resolver.resolve(entity_name)
         if not entity:
             return {
                 "entity": None,
@@ -52,41 +70,33 @@ class Graphyra:
                 "visited_chunks": []
             }
 
-        # 3. Build the NetworkX Graph
-        G = self.graph_builder.build()
-
-        # 4. BFS Traversal along links_to edges
-        visited_artifacts = []
-        visited_chunks = []
+        # 3. Use new TraversalEngine for exploration
+        graph_repo = SQLiteGraphRepository(self.storage)
+        from storage.mention_repository import MentionRepository
+        mention_repo = MentionRepository(self.storage)
         
-        # Queue contains tuples of (node_id, current_depth)
-        queue = [(start_artifact.id, 0)]
-        visited_set = {start_artifact.id}
-
-        while queue:
-            current_id, depth = queue.pop(0)
-
-            # Record visited artifact object
-            art_obj = self.artifact_repo.get(current_id)
-            if art_obj:
-                visited_artifacts.append(art_obj)
-
-            # Retrieve chunk IDs contained in this artifact (Artifact -> contains -> Chunk)
-            if G.has_node(current_id):
-                for neighbor in G.neighbors(current_id):
-                    edge_data = G.get_edge_data(current_id, neighbor)
-                    if edge_data and edge_data.get("type") == "contains":
-                        visited_chunks.append(neighbor)
-
-            # Traverse links_to edges if depth limit not reached
-            if depth < max_depth:
-                if G.has_node(current_id):
-                    for neighbor in G.neighbors(current_id):
-                        edge_data = G.get_edge_data(current_id, neighbor)
-                        if edge_data and edge_data.get("type") == "links_to":
-                            if neighbor not in visited_set:
-                                visited_set.add(neighbor)
-                                queue.append((neighbor, depth + 1))
+        traversal_engine = TraversalEngine(graph_repo, self.entity_repo, mention_repo)
+        evidence_retriever = EvidenceRetriever(self.storage)
+        
+        policy = TraversalPolicy(max_depth=max_depth, enable_scoring=False)
+        request = TraversalRequest(
+            query=entity_name,
+            seed_entities=[entity.id],
+            policy=policy
+        )
+        
+        traversal_result = traversal_engine.traverse(request)
+        chunks = evidence_retriever.retrieve_evidence(traversal_result)
+        
+        # Resolve artifacts associated with traversed anchors
+        visited_artifacts = []
+        for ent_id in traversal_result.visited_nodes:
+            for art in artifacts:
+                # Handle case where the node in visited_nodes might be an artifact ID itself
+                if art.id == ent_id or art.metadata.get("entity_id") == ent_id or (self.entity_repo.get(ent_id) and art.title.lower() == self.entity_repo.get(ent_id).canonical_name.lower()):
+                    if art not in visited_artifacts:
+                        visited_artifacts.append(art)
+                    break
 
         # Filter out start page from connected pages list
         connected_titles = [
@@ -95,17 +105,11 @@ class Graphyra:
             if art.id != start_artifact.id
         ]
 
-        # De-duplicate chunks while preserving discovery order
-        unique_chunks = []
-        for chunk_id in visited_chunks:
-            if chunk_id not in unique_chunks:
-                unique_chunks.append(chunk_id)
-
         return {
             "entity": entity,
             "start_artifact": start_artifact,
             "connected_pages": connected_titles,
-            "visited_chunks": unique_chunks
+            "visited_chunks": [c.id for c in chunks]
         }
 
     def visualize(self, start_entity_name: str, target_entity_name: str | None = None):
@@ -114,7 +118,7 @@ class Graphyra:
         Defaults to demonstrating a key path (e.g. to 'Irminsul') or the longest path.
         """
         # 1. Resolve start entity
-        entity = self.entity_repo.find_by_name(start_entity_name)
+        entity = self.anchor_resolver.resolve(start_entity_name)
         if not entity:
             print(f"Entity '{start_entity_name}' not found.")
             return
@@ -158,7 +162,7 @@ class Graphyra:
             target_entity_name = "Irminsul"
 
         if target_entity_name:
-            target_entity = self.entity_repo.find_by_name(target_entity_name)
+            target_entity = self.anchor_resolver.resolve(target_entity_name)
             if target_entity:
                 target_art = None
                 for art in artifacts:
@@ -202,104 +206,161 @@ class Graphyra:
     def retrieve(self, question: str) -> dict:
         """
         Process a natural language question.
-        1. Detects entities mentioned in the query.
+        1. Detects entities mentioned in the query (and run parallel semantic discovery if injected).
         2. Resolves entities to starting artifacts.
-        3. Traverses paths between resolved artifacts in the links_to graph.
+        3. Traverses paths between resolved artifacts using the TraversalEngine.
         4. Collects unique evidence chunks from visited pages.
         """
         import re
         from storage.chunk_repository import ChunkRepository
         chunk_repo = ChunkRepository(self.storage)
 
-        # 1. Entity Detection
+        # 1. Entity Detection (Canonical Name and Aliases)
         entities = self.entity_repo.list_all()
         normalized_q = re.sub(r'[^\w\s]', ' ', question).lower()
         words = normalized_q.split()
         
         detected_entities = []
         for e in entities:
-            name_lower = e.canonical_name.lower()
-            if len(name_lower.split()) > 1:
-                if name_lower in normalized_q:
-                    detected_entities.append(e)
-            else:
-                if name_lower in words:
-                    detected_entities.append(e)
+            # Check canonical name and aliases
+            names_to_check = [e.canonical_name.lower()]
+            names_to_check.extend([a.lower() for a in self.alias_manager.get_aliases(e.id)])
+            
+            for name_lower in names_to_check:
+                match = False
+                if len(name_lower.split()) > 1:
+                    if name_lower in normalized_q:
+                        match = True
+                else:
+                    if name_lower in words:
+                        match = True
+                
+                if match:
+                    if e not in detected_entities:
+                        detected_entities.append(e)
+                    break
 
-        # 2. Entity & Artifact Resolution
-        resolved_artifacts = []
-        all_artifacts = self.artifact_repo.list_all()
+        # Parallel Candidate Discovery & Fusion
+        if self.embedding_engine and self.vector_index and self.fusion_engine:
+            # A. Generate Query Embedding
+            q_emb = self.embedding_engine.get_query_embedding(question)
+            
+            # B. Search Vector Index
+            search_results = self.vector_index.search(q_emb, top_k=5, threshold=0.0)
+            
+            # C. Extract Entity Mentions from top semantic chunks using dictionary resolver
+            from ingestion.mention_extractor import DictionaryMentionExtractor
+            vocab = set()
+            for ent in entities:
+                vocab.add(ent.canonical_name)
+                for alias in self.alias_manager.get_aliases(ent.id):
+                    vocab.add(alias)
+            mention_extractor = DictionaryMentionExtractor(vocab)
+            
+            semantic_entities = []
+            for s_res in search_results:
+                chunk_obj = chunk_repo.get(s_res.id)
+                if chunk_obj:
+                    mentions = mention_extractor.extract_mentions(chunk_obj)
+                    for mention in mentions:
+                        resolved_ent = self.anchor_resolver.resolve(mention, create_if_missing=False)
+                        if resolved_ent:
+                            semantic_entities.append((resolved_ent, s_res.score))
+                            
+            # D. Merge & Rank Traversal Seeds
+            ranked_seeds = self.fusion_engine.fuse_candidates(detected_entities, semantic_entities)
+            seed_ids = [e.id for e, score in ranked_seeds]
+            detected_entities = [e for e, score in ranked_seeds]
+        else:
+            seed_ids = [e.id for e in detected_entities]
         
+        graph_repo = SQLiteGraphRepository(self.storage)
+        from storage.mention_repository import MentionRepository
+        mention_repo = MentionRepository(self.storage)
+        
+        traversal_engine = TraversalEngine(graph_repo, self.entity_repo, mention_repo)
+        evidence_retriever = EvidenceRetriever(self.storage)
+        subgraph_builder = SubgraphBuilder(self.storage)
+        
+        policy = TraversalPolicy()
+        request = TraversalRequest(
+            query=question,
+            seed_entities=seed_ids,
+            policy=policy
+        )
+        
+        # 3. Graph Traversal
+        traversal_result = traversal_engine.traverse(request)
+        
+        # 4. Evidence Retrieval
+        chunks = evidence_retriever.retrieve_evidence(traversal_result)
+        
+        # 5. Reasoning Subgraph Construction
+        subgraph = subgraph_builder.extract(traversal_result, chunks)
+        
+        # 6. Retrieve all Artifacts associated with the chunks
+        visited_artifacts = []
+        all_artifacts = self.artifact_repo.list_all()
+        for c in chunks:
+            art = self.artifact_repo.get(c.artifact_id)
+            if art and art not in visited_artifacts:
+                visited_artifacts.append(art)
+                
+        # Also ensure starting entity artifacts are included
         for e in detected_entities:
-            art_for_entity = None
             for art in all_artifacts:
                 if art.metadata.get("entity_id") == e.id or art.title.lower() == e.canonical_name.lower():
-                    art_for_entity = art
+                    if art not in visited_artifacts:
+                        visited_artifacts.append(art)
                     break
-            if art_for_entity and art_for_entity not in resolved_artifacts:
-                resolved_artifacts.append(art_for_entity)
 
-        # 3. Build links_to Graph
-        G = self.graph_builder.build()
-        links_G = nx.DiGraph()
-        for u, v, data in G.edges(data=True):
-            if data.get("type") == "links_to":
-                links_G.add_edge(u, v)
+        # 7. Convert heterogeneous path hops to artifact paths for the visualizer/UI
+        ui_paths = []
+        for path in traversal_result.discovered_paths:
+            art_path = []
+            for node_id in path.hops:
+                # 1. If it's already an artifact ID
+                if node_id.startswith("ART_") or any(art.id == node_id for art in visited_artifacts):
+                    if node_id not in art_path:
+                        art_path.append(node_id)
+                # 2. If it's a chunk ID, resolve to its parent artifact ID
+                elif node_id.startswith("CHK_") or any(c.id == node_id for c in chunks):
+                    c_obj = next((c for c in chunks if c.id == node_id), None)
+                    if not c_obj:
+                        from storage.chunk_repository import ChunkRepository
+                        chunk_repo = ChunkRepository(self.storage)
+                        c_obj = chunk_repo.get(node_id)
+                    if c_obj:
+                        if c_obj.artifact_id not in art_path:
+                            art_path.append(c_obj.artifact_id)
+                # 3. If it's an entity/anchor ID
+                else:
+                    ent = self.entity_repo.get(node_id)
+                    if ent:
+                        matching_art_id = None
+                        for art in visited_artifacts:
+                            if art.metadata.get("entity_id") == ent.id or art.title.lower() == ent.canonical_name.lower():
+                                matching_art_id = art.id
+                                break
+                        if matching_art_id:
+                            if matching_art_id not in art_path:
+                                art_path.append(matching_art_id)
+            if art_path and len(art_path) >= 1 and art_path not in ui_paths:
+                ui_paths.append(art_path)
 
-        # Ensure node attributes are copied
-        for node, data in G.nodes(data=True):
-            if node in links_G:
-                links_G.nodes[node].update(data)
-
-        # 4. Artifact Traversal
-        visited_artifact_ids = []
-        paths = []
-
-        if len(resolved_artifacts) >= 2:
-            # Shortest paths from the first entity artifact to subsequent ones
-            start_art = resolved_artifacts[0]
-            visited_artifact_ids.append(start_art.id)
-            
-            for target_art in resolved_artifacts[1:]:
-                if start_art.id in links_G and target_art.id in links_G:
-                    if nx.has_path(links_G, start_art.id, target_art.id):
-                        p = nx.shortest_path(links_G, start_art.id, target_art.id)
-                        paths.append(p)
-                        for node_id in p:
-                            if node_id not in visited_artifact_ids:
-                                visited_artifact_ids.append(node_id)
-        elif len(resolved_artifacts) == 1:
-            # 1-hop BFS neighborhood search
-            start_art = resolved_artifacts[0]
-            visited_artifact_ids.append(start_art.id)
-            
-            if start_art.id in links_G:
-                neighbors = list(links_G.neighbors(start_art.id))
-                for n_id in neighbors:
-                    paths.append([start_art.id, n_id])
-                    if n_id not in visited_artifact_ids:
-                        visited_artifact_ids.append(n_id)
-
-        # 5. Chunk Collection
-        collected_chunks = []
-        for art_id in visited_artifact_ids:
-            chunks = chunk_repo.get_by_artifact(art_id)
-            for c in chunks:
-                if c not in collected_chunks:
-                    collected_chunks.append(c)
-
-        # Resolve artifact objects
-        visited_artifacts = []
-        for art_id in visited_artifact_ids:
-            art_obj = self.artifact_repo.get(art_id)
-            if art_obj:
-                visited_artifacts.append(art_obj)
+        # Fallback path if empty but we have at least one artifact
+        if not ui_paths and visited_artifacts:
+            start_art = visited_artifacts[0]
+            if len(visited_artifacts) > 1:
+                ui_paths.append([start_art.id, visited_artifacts[1].id])
+            else:
+                ui_paths.append([start_art.id])
 
         return {
             "entities": detected_entities,
             "artifacts": visited_artifacts,
-            "chunks": collected_chunks,
-            "paths": paths
+            "chunks": chunks,
+            "paths": ui_paths
         }
 
     def explain(self, question: str):

@@ -12,10 +12,11 @@ class ArtifactRepository:
         title: str,
         source_type: str,
         source: str | None = None,
-        metadata: dict | None = None
+        metadata: dict | None = None,
+        id: str | None = None
     ) -> Artifact:
         metadata = metadata or {}
-        artifact_id = self.storage.generate_id("artifacts", "ART")
+        artifact_id = id or self.storage.generate_id("artifacts", "ART")
 
         artifact = Artifact(
             id=artifact_id,

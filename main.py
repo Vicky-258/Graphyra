@@ -14,7 +14,14 @@ def main():
     seed_database(storage, corpus_file)
 
     # Initialize Graphyra Traversal Engine
-    graphyra = Graphyra(storage)
+    from semantic.bootstrap import bootstrap_semantic_layer
+    emb_engine, vec_index, fus_engine, indexer = bootstrap_semantic_layer(storage, db_path="embeddings.db")
+    graphyra = Graphyra(
+        storage=storage,
+        embedding_engine=emb_engine,
+        vector_index=vec_index,
+        fusion_engine=fus_engine
+    )
 
     # Trigger Reasoning Trace
     question = "Who taught Nahida about Irminsul?"

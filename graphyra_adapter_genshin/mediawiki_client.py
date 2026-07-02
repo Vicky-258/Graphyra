@@ -22,7 +22,7 @@ class MediaWikiClient:
             headers={"User-Agent": self.user_agent}
         )
         try:
-            with urllib.request.urlopen(req) as response:
+            with urllib.request.urlopen(req, timeout=15) as response:
                 return json.loads(response.read().decode("utf-8"))
         except Exception as e:
             raise RuntimeError(f"HTTP call to MediaWiki API failed: {e}")

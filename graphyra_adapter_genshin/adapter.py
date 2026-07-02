@@ -11,6 +11,10 @@ from graphyra_adapter_genshin.mediawiki_client import MediaWikiClient
 from graphyra_adapter_genshin.parser import GenshinWikiParser
 from graphyra_adapter_genshin.sync import WikiSyncEngine
 
+# Crawler integration
+from graphyra_adapter_genshin.config_loader import load_crawler_config
+from graphyra.crawler import CrawlerFilter, WikiCrawler
+
 
 @dataclass
 class AdapterResult:
@@ -35,7 +39,8 @@ class GenshinWikiAdapter(SourceAdapter):
         endpoint_url: str = config.ENDPOINT_URL,
         source_id_prefix: str = config.SOURCE_ID_PREFIX,
         cache_file_path: str = config.CACHE_FILE,
-        output_dir: str = config.OUTPUT_DIR
+        output_dir: str = config.OUTPUT_DIR,
+        crawler_config: Optional[Dict[str, Any]] = None
     ):
         self.endpoint_url = endpoint_url
         self.source_id_prefix = source_id_prefix
@@ -47,6 +52,12 @@ class GenshinWikiAdapter(SourceAdapter):
         self.cache = CrawlCache(self.cache_file_path)
         self.sync_engine = WikiSyncEngine(self.cache, self.client, self.source_id_prefix)
 
+        # Ingestion configurations loading
+        self.crawler_config = crawler_config or load_crawler_config()
+        self.crawler_filter = CrawlerFilter(self.crawler_config)
+        max_p = self.crawler_config.get("max_pages", 500)
+        self.crawler = WikiCrawler(self.client, self.crawler_filter, max_pages=max_p)
+
     def ingest(
         self,
         category: Optional[str] = None,
@@ -57,43 +68,54 @@ class GenshinWikiAdapter(SourceAdapter):
         Ingests content from the wiki, returning a telemetry-rich AdapterResult.
         Supports full crawling via page enumeration, category limiting, and incremental checks.
         """
-        # 1. Discover targets
-        if category:
-            discovered_titles = self.client.discover_category_members(category, limit=max_pages)
-        else:
-            discovered_titles = self.client.discover_all_page_titles(limit=max_pages)
+        if max_pages is not None:
+            self.crawler.max_pages = max_pages
 
-        # Deduplicate and sort
-        discovered_titles = sorted(list(set(discovered_titles)))
+        mode = self.crawler_config.get("mode", "full")
+        seed_pages = self.crawler_config.get("seed_pages", [])
 
-        # Slice to max pages if requested
-        if max_pages and len(discovered_titles) > max_pages:
-            discovered_titles = discovered_titles[:max_pages]
+        # 1. Discover initial targets
+        all_titles_fallback = []
+        if mode != "seeded" or not seed_pages:
+            if category:
+                all_titles_fallback = self.client.discover_category_members(category, limit=max_pages)
+            else:
+                all_titles_fallback = self.client.discover_all_page_titles(limit=max_pages)
+            all_titles_fallback = sorted(list(set(all_titles_fallback)))
 
-        # 2. Sync Diff
+        # 2. Run crawl stage through configured Crawler
+        crawl_results = self.crawler.crawl(
+            mode=mode,
+            seed_pages=seed_pages,
+            all_titles_fallback=all_titles_fallback
+        )
+
+        discovered_titles = [title for title, _ in crawl_results]
+
+        # 3. Sync Diff check
         if incremental:
             new_pages, updated_pages, deleted_doc_ids, latest_revisions = self.sync_engine.diff(discovered_titles)
+            to_fetch_set = set(new_pages + updated_pages)
         else:
             new_pages = discovered_titles
             updated_pages = []
             deleted_doc_ids = []
+            to_fetch_set = set(discovered_titles)
             latest_revisions = self.client.get_page_revisions(discovered_titles)
 
-        to_fetch = new_pages + updated_pages
         documents: List[KnowledgeDocument] = []
-        failed_pages: List[str] = []
+        failed_pages: List[str] = [t for t, r in self.crawler.skip_reasons.items() if "Download failure" in r]
         pages_processed = 0
 
-        # 3. Fetching Loop with Failure Tolerance
-        for title in to_fetch:
+        # 4. Parse content
+        for title, parse_data in crawl_results:
+            if title not in to_fetch_set:
+                continue
             try:
-                # Fetch parsed HTML details
-                parse_data = self.client.fetch_page_parse(title)
                 canonical_title = parse_data.get("title", title)
                 html_content = parse_data.get("text", {}).get("*", "")
-                
-                # Parse to KnowledgeDocuments
-                extracted_docs = self.parser.parse(html_content, canonical_title)
+
+                extracted_docs = self.parser.parse(html_content, canonical_title, parse_data.get("redirects", []))
                 documents.extend(extracted_docs)
 
                 # Set cache status revision metadata on successful parse
@@ -103,12 +125,10 @@ class GenshinWikiAdapter(SourceAdapter):
                 elif title in latest_revisions:
                     self.cache.set(doc_id, latest_revisions[title])
                 else:
-                    # Fallback default mock revision if missing
                     self.cache.set(doc_id, {"revid": 1, "timestamp": datetime.datetime.now().isoformat()})
 
                 pages_processed += 1
             except Exception as e:
-                # Page processing failures must NOT abort the crawling run
                 print(f"Error: Ingest failed for page '{title}': {e}")
                 failed_pages.append(title)
 
@@ -117,13 +137,23 @@ class GenshinWikiAdapter(SourceAdapter):
             for doc_id in deleted_doc_ids:
                 self.cache.remove(doc_id)
 
+        # Output detailed crawler telemetry report
+        print(f"\n--- Crawler Run Report ---")
+        print(f"Total Pages Discovered: {self.crawler.total_discovered}")
+        print(f"Pages Accepted: {self.crawler.accepted_count}")
+        print(f"Pages Skipped: {self.crawler.skipped_count}")
+        if self.crawler.skip_reasons:
+            print("Skip Reasons (sample of 10):")
+            for t, r in list(self.crawler.skip_reasons.items())[:10]:
+                print(f"  - '{t}': {r}")
+
         return AdapterResult(
             documents=documents,
-            pages_discovered=len(discovered_titles),
+            pages_discovered=self.crawler.total_discovered,
             pages_processed=pages_processed,
-            pages_new=len(new_pages),
-            pages_updated=len(updated_pages),
-            pages_deleted=len(deleted_doc_ids),
+            pages_new=len([t for t in to_fetch_set if t in discovered_titles]),
+            pages_updated=0,
+            pages_deleted=len(deleted_doc_ids) if incremental else 0,
             failed_pages=failed_pages,
             crawl_timestamp=datetime.datetime.now().isoformat()
         )
@@ -154,8 +184,8 @@ class GenshinWikiAdapter(SourceAdapter):
                 parse_data = self.client.fetch_page_parse(title)
                 canonical_title = parse_data.get("title", title)
                 html_content = parse_data.get("text", {}).get("*", "")
-                
-                extracted_docs = self.parser.parse(html_content, canonical_title)
+
+                extracted_docs = self.parser.parse(html_content, canonical_title, parse_data.get("redirects", []))
                 documents.extend(extracted_docs)
 
                 # Set cache status revision metadata on successful parse

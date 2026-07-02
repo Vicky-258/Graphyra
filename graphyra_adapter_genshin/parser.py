@@ -1,5 +1,5 @@
 import urllib.parse
-from typing import List, Dict, Any, Set
+from typing import List, Dict, Any, Set, Optional
 from bs4 import BeautifulSoup, Tag
 
 from graphyra.contracts import (
@@ -8,6 +8,7 @@ from graphyra.contracts import (
     Reference,
     ContentBlock
 )
+from graphyra_adapter_genshin.sanitizer import HTMLSanitizer
 
 
 class GenshinWikiParser:
@@ -19,11 +20,11 @@ class GenshinWikiParser:
 
     def __init__(self, source_id_prefix: str = "genshin_fandom:main"):
         self.source_id_prefix = source_id_prefix
+        self.last_sanitization_stats: Dict[str, Any] = {}
 
-    def parse(self, html_content: str, title: str) -> List[KnowledgeDocument]:
+    def parse(self, html_content: str, title: str, redirects: Optional[List[Dict[str, Any]]] = None) -> List[KnowledgeDocument]:
         """
         Parses raw HTML text, returning a list of extracted KnowledgeDocuments.
-        (Usually returns one main page document, but can return multiple in case of inline redirects).
         """
         if not html_content:
             return []
@@ -35,17 +36,30 @@ class GenshinWikiParser:
             source_type="mediawiki"
         )
 
-        soup = BeautifulSoup(html_content, "html.parser")
-        
-        # In Fandom page renderings, content lives under the .mw-parser-output container
-        content_div = soup.find(class_="mw-parser-output") or soup
+        # 1. Run HTML Sanitization Stage (boilerplate cleanup, infobox structured extraction)
+        sanitizer = HTMLSanitizer()
+        content_div, structured_blocks, stats = sanitizer.sanitize(html_content)
+        self.last_sanitization_stats = stats
 
-        # 1. Establish the default Introduction section
+        # 2. Establish the default Introduction section and append structured infobox content blocks
         current_section = Section(id="Introduction", title="Introduction")
+        current_section.content_blocks.extend(structured_blocks)
         doc.sections.append(current_section)
 
-        # Non-knowledge layout classes to discard
-        ignored_classes = ["toc", "navbox", "portable-infobox", "gallery", "notice", "reference", "thumb"]
+        # Process redirects list into Reference components
+        if redirects:
+            for r in redirects:
+                from_title = r.get("from", "")
+                to_title = r.get("to", "")
+                if from_title and to_title:
+                    ref = Reference(
+                        source_document=f"{self.source_id_prefix}:{from_title.replace(' ', '_')}",
+                        source_anchor="",
+                        target_document=f"{self.source_id_prefix}:{to_title.replace(' ', '_')}",
+                        target_anchor="",
+                        reference_type="redirects_to"
+                    )
+                    doc.references.append(ref)
 
         # Track unique references
         seen_refs: Set[tuple] = set()
@@ -94,16 +108,24 @@ class GenshinWikiParser:
                     seen_refs.add(ref_key)
                     doc.references.append(ref)
 
-        # Parse block elements
-        for child in content_div.children:
-            if not isinstance(child, Tag):
+        def is_nested_in_list_or_table(tag: Tag) -> bool:
+            """Helper to check if a block element resides inside a list or a table."""
+            parent = tag.parent
+            while parent and parent != content_div:
+                if parent.name in ["ul", "ol", "li", "table", "tr", "td", "th"]:
+                    return True
+                parent = parent.parent
+            return False
+
+        # 3. Parse block elements recursively (enables nesting support like tabbers/columns)
+        for child in content_div.find_all(["h2", "h3", "p", "ul", "ol", "table", "pre"], recursive=True):
+            # Skip elements nested inside tables or lists to prevent double extraction
+            if is_nested_in_list_or_table(child):
                 continue
 
-            # Bypass ignored components
+            # Bypass ignored elements like image galleries/thumbs
             classes = child.get("class", [])
-            if any(cls in ignored_classes for cls in classes):
-                continue
-            if child.name in ["aside", "style", "script"]:
+            if any(cls in ["gallery", "thumb"] for cls in classes):
                 continue
 
             # A. Heading Splitters (h2, h3)
@@ -121,10 +143,6 @@ class GenshinWikiParser:
 
             # B. Standard Paragraph Block
             if child.name == "p":
-                # Strip helper citations like [1]
-                for sup in child.find_all("sup", class_="reference"):
-                    sup.decompose()
-                
                 p_text = child.text.strip()
                 if p_text:
                     block = ContentBlock(type="text", content=p_text)
@@ -136,8 +154,6 @@ class GenshinWikiParser:
             if child.name in ["ul", "ol"]:
                 items = []
                 for li in child.find_all("li", recursive=False):
-                    for sup in li.find_all("sup", class_="reference"):
-                        sup.decompose()
                     li_text = li.text.strip()
                     if li_text:
                         items.append(li_text)

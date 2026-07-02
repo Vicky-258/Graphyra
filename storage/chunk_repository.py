@@ -1,4 +1,5 @@
 import json
+from typing import Optional, List
 from models.chunk import Chunk
 
 
@@ -11,17 +12,22 @@ class ChunkRepository:
         self,
         artifact_id: str,
         content: str,
-        metadata: dict | None = None
+        metadata: dict | None = None,
+        id: str | None = None,
+        embedding: list[float] | None = None
     ) -> Chunk:
         metadata = metadata or {}
-        chunk_id = self.storage.generate_id("chunks", "CHK")
+        chunk_id = id or self.storage.generate_id("chunks", "CHK")
 
         chunk = Chunk(
             id=chunk_id,
             artifact_id=artifact_id,
             content=content,
+            embedding=embedding,
             metadata=metadata
         )
+
+        embedding_str = json.dumps(embedding) if embedding is not None else None
 
         with self.storage.get_connection() as conn:
             cursor = conn.cursor()
@@ -31,14 +37,16 @@ class ChunkRepository:
                     id,
                     artifact_id,
                     content,
+                    embedding,
                     metadata
                 )
-                VALUES (?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?)
                 """,
                 (
                     chunk.id,
                     chunk.artifact_id,
                     chunk.content,
+                    embedding_str,
                     json.dumps(chunk.metadata)
                 )
             )
@@ -55,6 +63,7 @@ class ChunkRepository:
                     id,
                     artifact_id,
                     content,
+                    embedding,
                     metadata
                 FROM chunks
                 WHERE id = ?
@@ -75,6 +84,7 @@ class ChunkRepository:
                     id,
                     artifact_id,
                     content,
+                    embedding,
                     metadata
                 FROM chunks
                 WHERE artifact_id = ?
@@ -93,6 +103,7 @@ class ChunkRepository:
                     id,
                     artifact_id,
                     content,
+                    embedding,
                     metadata
                 FROM chunks
                 """
@@ -103,9 +114,27 @@ class ChunkRepository:
     def _row_to_chunk(self, row) -> Chunk:
         if row is None:
             return None
+        emb = None
+        if row[3] is not None:
+            emb = json.loads(row[3])
         return Chunk(
             id=row[0],
             artifact_id=row[1],
             content=row[2],
-            metadata=json.loads(row[3] or "{}")
+            embedding=emb,
+            metadata=json.loads(row[4] or "{}")
         )
+
+    def update_embedding(self, chunk_id: str, embedding: list[float] | None) -> None:
+        """Updates the embedding array of a specific chunk."""
+        import json
+        embedding_str = json.dumps(embedding) if embedding is not None else None
+        with self.storage.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE chunks SET embedding = ? WHERE id = ?",
+                (embedding_str, chunk_id)
+            )
+            conn.commit()
+
+
