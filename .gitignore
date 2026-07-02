@@ -86,3 +86,6 @@ research_docs/
 
 # Benchmark output directory
 doc_benchmark/
+
+# Evaluation reports output
+evaluation/reports/latest/
