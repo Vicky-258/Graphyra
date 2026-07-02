@@ -1,63 +1,93 @@
-# Graphyra — Graph-Guided Retrieval-Augmented Generation (G-RAG) Engine
+# Graphyra
 
-Graphyra is a production-grade **Graph-Guided Retrieval-Augmented Generation (G-RAG)** engine. Traditional RAG retrieval treats text chunks as isolated vectors, losing structural links and multi-hop traversal contexts. Graphyra solves this by pairing document chunks with a relational reference navigation graph, performing dynamic path scoring to retrieve coherent evidence chains for complex, multi-hop queries.
-
----
-
-## 🚀 Key Subsystems
-
-1. **Incremental Ingestion Pipeline** (`ingestion/`): Employs a **Paragraph-First** chunking strategy to preserve paragraph context and HTML tables. Uses a compiled **Dictionary Mention Extractor** to map entity synonyms and redirects dynamically.
-2. **Decoupled Relational Storage** (`storage/`): Implements SQLite storage patterns using a thread-local proxy session model. Exposes a decoupled `GraphRepository` interface separating SQL queries from graph traversal loops.
-3. **Semantic Index & Fusion** (`semantic/`): Maintains a secondary SQLite vector index (`embeddings.db`) isolated from the main knowledge graph. Runs fast in-memory cosine similarities using numpy dot-products. Fuses semantic discovery and direct keyword matches dynamically via `CandidateFusionEngine`.
-4. **Scraper Wiki Adapter** (`graphyra-adapter-genshin`): MediaWiki scraping client with revision-diff change detection and synchronizer queues.
-5. **Interactive UI Storyboard & Diagnostics Dashboard** (`frontend/`): A Vite + React application providing a matte dark query trace storyboard, structural graph visualization, and an ingestion statistics dashboard displaying metrics histograms.
+> **An entity-centric, graph-guided evidence retrieval engine that separates knowledge storage from graph navigation, enabling explainable multi-hop retrieval through structured traversal and evidence ranking.**
 
 ---
 
-## 📂 Codebase Directory Structure
+Graphyra is a graph-guided evidence retrieval engine designed for complex knowledge bases. Instead of retrieving isolated text chunks through vector similarity alone, Graphyra navigates structured relationships between entities, discovers connected evidence through graph traversal, and ranks supporting evidence before it reaches a downstream reasoning system.
+
+---
+
+## 💡 Philosophy
+
+Graphyra is built around three core architectural tenets:
+
+1. **Knowledge lives in documents.** Text paragraphs and segments are the primary sources of truth, context, and semantic nuance.
+2. **The graph is not the knowledge.** The graph exists purely as a structural navigation layer designed to guide traversal paths.
+3. **Traversal guides evidence discovery.** The relationships between entities provide the roads, while the documents provide the destination.
+
+---
+
+## 🛣️ The Retrieval Pipeline
+
+Graphyra separates query resolution from downstream generation, ensuring that reasoning systems receive a pre-structured, scored, and contextualized evidence subgraph.
 
 ```text
-Graphyra/
-├── docs/                             # Full Project Technical Documentation
-│   ├── README.md                     # Documentation registry & overview
-│   ├── architecture.md               # Topology, boundaries, and query flows
-│   ├── ingestion.md                  # Chunk policies & Synonym extractors
-│   ├── storage.md                    # Database schemas & proxy proxies
-│   ├── traversal_and_retrieval.md     # BFS scoring & CandidateEvidence DTOs
-│   └── semantic_search.md            # Vector databases & fusion formulas
-├── ingestion/                        # Text chunking & Entity extraction
-├── storage/                          # Relational SQLite repositories
-├── semantic/                         # Vector database, engines, and fusion
-├── graphyra_adapter_genshin/         # External wiki scraping adapter
-├── models/                           # Type contracts & Dataclasses
-├── frontend/                         # React UI Storyboard & Diagnostics Dashboard
-├── engine.py                         # Graphyra composition & retrieval entrypoint
-├── server.py                         # HTTP REST API server & job manager
-└── index_semantics.py                # Standalone CLI semantic index tool
+       Query (User Search)
+                │
+                ▼
+      [ Entity Resolution ]  <─── Maps aliases/synonyms to canonical anchors
+                │
+                ▼
+       [ Graph Traversal ]   <─── BFS path-scoring over relations
+                │
+                ▼
+     [ Candidate Evidence ]  <─── Groups paragraph chunks along paths
+                │
+                ▼
+      [ Evidence Ranking ]   <─── Ranks chunks by path & semantic scores
+                │
+                ▼
+      [ Context Assembly ]   <─── Builds unified evidence subgraphs
+                │
+                ▼
+       Downstream Reasoning  <─── LLM or downstream consumer (optional)
 ```
+
+---
+
+## ⭐ Core Capabilities
+
+* **Entity Resolution** — Dynamically resolves aliases, synonyms, and redirect terms to stable retrieval anchors, preventing fragmented paths.
+* **Graph Traversal** — Explores connected entities using policy-controlled, weighted BFS paths to discover multi-hop relationships.
+* **Evidence Ranking** — Combines traversal scores, query relevance, and evidence support to rank and filter candidate evidence.
+* **Incremental Ingestion** — Incrementally registers new artifacts, chunks, entities, and relations without needing to rebuild the entire knowledge base.
+* **Explainable Retrieval** — Every chunk of retrieved evidence can be traced back through its traversal path, hops, and source document, offering auditability.
+
+---
+
+## 🏗️ System Architecture
+
+Graphyra is designed as a modular, backend-agnostic system. While it is currently configured with a default stack, each block remains replaceable:
+
+* **Core Engine**: Orchestrates retrieval and handles BFS graph traversals.
+* **Storage Providers**: Decoupled from specific databases. Currently implemented using a thread-safe SQLite storage proxy mapping page databases.
+* **Vector Indexing**: Decoupled vector interface. Currently implemented using a standalone SQLite index database and a local Sentence Transformers embedding provider.
+* **Extractor Adapters**: Interfaces to crawler APIs. Currently configured for MediaWiki page-diff synchronization.
+* **Visualizer UI**: Matte dark query trace visualizer and diagnostics statistics dashboard.
 
 ---
 
 ## 🛠️ Getting Started
 
 ### 1. Database Seeding & CLI Trace
-To seed the Sumeru wiki corpus, build the relational tables, run model-drift verification, and execute a CLI reasoning trace, run:
+To seed the database with the Sumeru lore corpus and run a CLI traversal reasoning trace:
 ```bash
 python main.py
 ```
 
 ### 2. Standalone Semantic Indexing
-To generate real `all-MiniLM-L6-v2` Sentence Transformer embeddings for all chunks in the database without running a crawl:
+To generate real embeddings for all stored chunks using the active Sentence Transformer configuration:
 ```bash
 python index_semantics.py
 ```
 
 ### 3. Running the REST API Server & UI
-To spin up the HTTP web server backend:
+To start the local web backend server:
 ```bash
 python server.py
 ```
-Then navigate to `http://localhost:8000` to try multi-hop queries, visualizer graphs, crawl sync queues, and database diagnostics.
+Open `http://localhost:8000` to interact with the query trace storyboard, graph visualizers, and synchronization queues.
 
 ### 4. Technical Documentation
-For full API contracts, database schemas, traversal scoring math, and flowcharts, see the [Technical Documentation Suite](docs/README.md).
+For complete API contracts, relational schemas, scoring formulas, and directory flows, check the [Technical Documentation Suite](docs/README.md).
