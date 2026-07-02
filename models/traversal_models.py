@@ -73,6 +73,8 @@ class CandidateEvidence:
     paths: List[TraversalPath]
     bm25_score: Optional[float] = None
     semantic_score: Optional[float] = None
+    rrf_score: Optional[float] = None
+    reranker_score: Optional[float] = None
     final_score: Optional[float] = None
 
     @property
