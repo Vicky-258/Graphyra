@@ -120,3 +120,20 @@ sequenceDiagram
     Core-->>API: JSON payload {entities, chunks, paths}
     API-->>Client: HTTP 200 Response
 ```
+
+---
+
+## 4. Design Assumptions & Suitability Profile
+
+Graphyra is intentionally optimized for reference-rich, interconnected corpora rather than flat collections of disjointed documents. 
+
+### Core Assumptions:
+* **Explicit or Derivable Relations**: The retrieval engine assumes the presence of navigable connections (e.g., wiki hyperlinks, legal/statutory cross-references, academic citations, database relationships, code imports, or cell ontologies).
+* **Entity-Centric Traversal**: It assumes that navigating from entity anchor to entity anchor along relationships leads directly to the most promising supporting evidence.
+
+### Corpus Selection Matrix:
+
+| Suitability Class | Examples | Architectural Advantage |
+| :--- | :--- | :--- |
+| **Highly Suitable** | Wikis, API Reference Docs, Software Imports, Research Papers, Regulatory Statutes | **Maximal**: Path traversals resolve multi-hop links and explain evidence provenance step-by-step. |
+| **Less Suitable** | Random Chat Logs, Blog Feeds, News Snippets, Disjointed PDF catalogs | **Minimal**: Falls back to isolated keyword/semantic matches without relational benefit. |

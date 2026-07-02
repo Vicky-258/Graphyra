@@ -1,6 +1,6 @@
 # Graphyra Documentation
 
-Welcome to the official technical documentation for **Graphyra** — a Graph-Guided Retrieval-Augmented Generation (G-RAG) engine designed to traverse entity-relation knowledge networks and extract structured evidence for reasoning traces.
+Welcome to the official technical documentation for **Graphyra** — an entity-centric, graph-guided evidence retrieval engine designed to navigate interconnected knowledge databases, resolve identities, and extract structured candidate evidence for downstream reasoning traces.
 
 This documentation folder provides detailed breakdowns of all architectural subsystems, classes, database schemas, and integration pipelines in a format suitable for production systems.
 
