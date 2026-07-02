@@ -83,3 +83,6 @@ research_docs/
 # SQLite temporary journaling files
 *.db-shm
 *.db-wal
+
+# Benchmark output directory
+doc_benchmark/
