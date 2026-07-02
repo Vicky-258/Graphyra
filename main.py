@@ -10,7 +10,7 @@ def main():
     storage.initialize_database()
 
     # Seed the database
-    corpus_file = os.path.join("data", "sumeru_demo_corpus.json")
+    corpus_file = os.path.join("data", "genshin_500_docs.json")
     seed_database(storage, corpus_file)
 
     # Initialize Graphyra Traversal Engine
