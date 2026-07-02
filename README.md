@@ -18,6 +18,23 @@ Graphyra is built around three core architectural tenets:
 
 ---
 
+## 🎯 Suitability Profile
+
+Graphyra is designed for **interconnected knowledge** rather than isolated documents. Its retrieval model assumes that meaningful relationships exist—or can be extracted—between entities, documents, or other knowledge artifacts. The richer this reference structure, the more effectively Graphyra can perform multi-hop evidence discovery and explainable retrieval.
+
+### Good Fit
+* **Wikis & Knowledge Bases** (e.g. MediaWiki, internal wikis) where pages explicitly link conceptually.
+* **Technical Manuals & Software Docs** where APIs, classes, and specifications cross-reference.
+* **Academic & Research Literature** connected through citation trees and bibliography lists.
+* **Ontology-Driven Databases** structured around taxonomic relationships.
+
+### Less Suitable
+* **Random Chat Logs** or stream transcripts lacking conceptual connections.
+* **Independent Blog Posts** or daily news feeds with minimal reference linking.
+* **Flat Lists of Files** containing disjointed or isolated facts.
+
+---
+
 ## 🛣️ The Retrieval Pipeline
 
 Graphyra separates query resolution from downstream generation, ensuring that reasoning systems receive a pre-structured, scored, and contextualized evidence subgraph.
