@@ -1,85 +1,63 @@
-# Graphyra: Graph-Constrained Retrieval (GCR) Engine
+# Graphyra — Graph-Guided Retrieval-Augmented Generation (G-RAG) Engine
 
-Graphyra is a Proof of Concept (POC) demonstrating **Graph-Constrained Retrieval (GCR)**. Traditional RAG retrieval treats text chunks as isolated vectors, which fails for complex, multi-hop queries. Graphyra solves this by retaining document chunks but layering a reference navigation graph on top, walking relations from document to document to extract exact evidence.
-
----
-
-## Key Features
-
-1. **Entity Extraction & Resolution**: Scans user questions to detect key concepts (People, Locations, Concepts) and resolves them to their corresponding documentation folders.
-2. **Graph Traversal (BFS & Shortest Path)**: Uses NetworkX to trace reference links connecting documents. It can walk paths from start pages to target pages (e.g. `Nahida` $\rightarrow$ `Greater Lord Rukkhadevata` $\rightarrow$ `Irminsul`).
-3. **Evidence Extraction**: Compiles exact paragraph chunks along the traversal path to gather context.
-4. **Interactive Storytelling UI**: A premium matte dark timeline interface that visualizes the retrieval steps in conversational English, showing anyone *how* the engine got the answer.
+Graphyra is a production-grade **Graph-Guided Retrieval-Augmented Generation (G-RAG)** engine. Traditional RAG retrieval treats text chunks as isolated vectors, losing structural links and multi-hop traversal contexts. Graphyra solves this by pairing document chunks with a relational reference navigation graph, performing dynamic path scoring to retrieve coherent evidence chains for complex, multi-hop queries.
 
 ---
 
-## Folder Structure
+## 🚀 Key Subsystems
+
+1. **Incremental Ingestion Pipeline** (`ingestion/`): Employs a **Paragraph-First** chunking strategy to preserve paragraph context and HTML tables. Uses a compiled **Dictionary Mention Extractor** to map entity synonyms and redirects dynamically.
+2. **Decoupled Relational Storage** (`storage/`): Implements SQLite storage patterns using a thread-local proxy session model. Exposes a decoupled `GraphRepository` interface separating SQL queries from graph traversal loops.
+3. **Semantic Index & Fusion** (`semantic/`): Maintains a secondary SQLite vector index (`embeddings.db`) isolated from the main knowledge graph. Runs fast in-memory cosine similarities using numpy dot-products. Fuses semantic discovery and direct keyword matches dynamically via `CandidateFusionEngine`.
+4. **Scraper Wiki Adapter** (`graphyra-adapter-genshin`): MediaWiki scraping client with revision-diff change detection and synchronizer queues.
+5. **Interactive UI Storyboard & Diagnostics Dashboard** (`frontend/`): A Vite + React application providing a matte dark query trace storyboard, structural graph visualization, and an ingestion statistics dashboard displaying metrics histograms.
+
+---
+
+## 📂 Codebase Directory Structure
 
 ```text
 Graphyra/
-├── data/
-│   └── sumeru_demo_corpus.json      # 10 connected page wiki data (Sumeru lore)
-├── models/                          # Database dataclasses (Entities, Artifacts, Chunks)
-├── storage/                         # Repositories executing SQLite queries
-├── utils/
-│   ├── graph_builder.py             # Compiles NetworkX graph from SQLite tables
-│   └── seed_db.py                   # Re-seeds database with local corpus
-├── web/
-│   ├── index.html                   # Storyboard UI markup
-│   ├── style.css                    # Matte dark theme style system
-│   └── app.js                       # Frontend visual timeline rendering
-├── engine.py                        # GCR search, traversal pathing, and ASCII traces
-├── main.py                          # CLI runner for quick reasoning traces
-└── server.py                        # Zero-dependency Python HTTP API server
+├── docs/                             # Full Project Technical Documentation
+│   ├── README.md                     # Documentation registry & overview
+│   ├── architecture.md               # Topology, boundaries, and query flows
+│   ├── ingestion.md                  # Chunk policies & Synonym extractors
+│   ├── storage.md                    # Database schemas & proxy proxies
+│   ├── traversal_and_retrieval.md     # BFS scoring & CandidateEvidence DTOs
+│   └── semantic_search.md            # Vector databases & fusion formulas
+├── ingestion/                        # Text chunking & Entity extraction
+├── storage/                          # Relational SQLite repositories
+├── semantic/                         # Vector database, engines, and fusion
+├── graphyra_adapter_genshin/         # External wiki scraping adapter
+├── models/                           # Type contracts & Dataclasses
+├── frontend/                         # React UI Storyboard & Diagnostics Dashboard
+├── engine.py                         # Graphyra composition & retrieval entrypoint
+├── server.py                         # HTTP REST API server & job manager
+└── index_semantics.py                # Standalone CLI semantic index tool
 ```
 
 ---
 
-## Getting Started
+## 🛠️ Getting Started
 
 ### 1. Database Seeding & CLI Trace
-To initialize the SQLite database (`graphyra.db`), seed the Sumeru wiki corpus, and verify a CLI trace, run:
+To seed the Sumeru wiki corpus, build the relational tables, run model-drift verification, and execute a CLI reasoning trace, run:
 ```bash
 python main.py
 ```
 
-This will seed the database and output an ASCII reasoning trace for the question: *"Who taught Nahida about Irminsul?"*
-```text
---- Running Reasoning Trace for: "Who taught Nahida about Irminsul?" ---
-Detected Entity:
-Nahida
-Irminsul
-
-Resolved Artifact:
-Nahida Page
-Irminsul Page
-
-Traversal:
-Nahida Page
-↓
-Rukkhadevata Page
-↓
-Irminsul Page
+### 2. Standalone Semantic Indexing
+To generate real `all-MiniLM-L6-v2` Sentence Transformer embeddings for all chunks in the database without running a crawl:
+```bash
+python index_semantics.py
 ```
 
-### 2. Running the Storyboard Web UI
-To spin up the local server and try searches in the web browser, launch the zero-dependency Python server:
+### 3. Running the REST API Server & UI
+To spin up the HTTP web server backend:
 ```bash
 python server.py
 ```
+Then navigate to `http://localhost:8000` to try multi-hop queries, visualizer graphs, crawl sync queues, and database diagnostics.
 
-Then open your browser and navigate to:
-```text
-http://localhost:8000
-```
-
-Try clicking the suggestions on the screen (such as *"Who taught Nahida about Irminsul?"* or *"How does the Akasha System work?"*) to witness the step-by-step timeline explanation.
-
----
-
-## Technical Details & Shortcuts
-
-* **Database**: Persisted locally in SQLite. The database maps entity mentions inside chunks, as well as citation links between parent documents.
-* **Graphing**: Recompiled into a NetworkX DiGraph on demand in the engine.
-* **Answer Synthesis (Sandbox Limitation)**: Because the system is designed to run in a sandboxed, zero-dependency offline environment, the final text generation step is handled by a rule-based parser mapping primary query subjects, falling back to chunk summaries for other topics.
-* **Detailed Audit**: For a full list of hardcoded logic, corners cut, and production next steps, see the internal documentation file at `brain/383ec70c-b76d-42a8-9410-bda4029ae1eb/system_architecture_and_debts.md`.
+### 4. Technical Documentation
+For full API contracts, database schemas, traversal scoring math, and flowcharts, see the [Technical Documentation Suite](docs/README.md).
