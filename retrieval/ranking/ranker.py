@@ -71,26 +71,112 @@ class EvidenceRanker:
             for c in candidates:
                 c.semantic_score = None
 
-        # 4. Rank Fusion
-        # Re-initialize the RankFusionEngine with the policy's RRF constant
-        self.fusion_engine.k = pol.rrf_k
-        fused = self.fusion_engine.combine(candidates, active_rankings)
+        # 4. Score Normalization Preprocessing
+        trav_scores = [c.best_traversal_score for c in candidates if c.best_traversal_score is not None]
+        trav_min = min(trav_scores, default=0.0)
+        trav_max = max(trav_scores, default=1.0)
+        trav_denom = (trav_max - trav_min) if (trav_max - trav_min) > 0 else 1.0
 
-        # 5. Precision Reranking
-        if pol.enable_reranker and self.reranker_provider:
-            # Slice the candidate pool to send only top-K to reranker
-            rerank_limit = min(pol.rerank_top_k, len(fused))
-            to_rerank = fused[:rerank_limit]
-            not_reranked = fused[rerank_limit:]
+        bm25_scores = [c.bm25_score for c in candidates if c.bm25_score is not None]
+        bm25_min = min(bm25_scores, default=0.0)
+        bm25_max = max(bm25_scores, default=1.0)
+        bm25_denom = (bm25_max - bm25_min) if (bm25_max - bm25_min) > 0 else 1.0
 
-            # Execute Reranker
-            reranked = self.reranker_provider.rerank(query, to_rerank)
+        sem_scores = [c.semantic_score for c in candidates if c.semantic_score is not None]
+        sem_min = min(sem_scores, default=0.0)
+        sem_max = max(sem_scores, default=1.0)
+        sem_denom = (sem_max - sem_min) if (sem_max - sem_min) > 0 else 1.0
+
+        for c in candidates:
+            raw_t = c.best_traversal_score if c.best_traversal_score is not None else 0.0
+            raw_b = c.bm25_score if c.bm25_score is not None else 0.0
+            raw_s = c.semantic_score if c.semantic_score is not None else 0.0
             
-            # Map rerank results to final_score
+            c.signals = {
+                "traversal": (raw_t - trav_min) / trav_denom if trav_max != trav_min else (1.0 if trav_max > 0 else 0.0),
+                "bm25": (raw_b - bm25_min) / bm25_denom if bm25_max != bm25_min else (1.0 if bm25_max > 0 else 0.0),
+                "semantic": (raw_s - sem_min) / sem_denom if sem_max != sem_min else (1.0 if sem_max > 0 else 0.0)
+            }
+
+        # 5. Resolve & Execute Ranking Strategy
+        from retrieval.ranking.strategy import RankingStrategy, RRFStrategy, TraversalPriorityStrategy, WeightedScoreStrategy, GraphCentricStrategy
+        
+        strategy_class = None
+        strategy_clean = pol.strategy.lower().replace("_", "").replace("strategy", "")
+        for sub in RankingStrategy.__subclasses__():
+            sub_clean = sub.__name__.lower().replace("_", "").replace("strategy", "")
+            if sub_clean == strategy_clean:
+                strategy_class = sub
+                break
+
+        if strategy_class is RRFStrategy:
+            strategy_inst = RRFStrategy(k=pol.rrf_k)
+        elif strategy_class is TraversalPriorityStrategy:
+            strategy_inst = TraversalPriorityStrategy(alpha=pol.bm25_weight, beta=pol.semantic_weight)
+        elif strategy_class is WeightedScoreStrategy:
+            strategy_inst = WeightedScoreStrategy(trav_w=pol.traversal_weight, bm25_w=pol.bm25_weight, sem_w=pol.semantic_weight)
+        elif strategy_class is GraphCentricStrategy:
+            strategy_inst = GraphCentricStrategy(
+                threshold=pol.graph_centric_threshold,
+                bonus=pol.graph_centric_bonus,
+                trav_w=pol.traversal_weight,
+                bm25_w=pol.bm25_weight,
+                sem_w=pol.semantic_weight
+            )
+        elif strategy_class is not None:
+            # Dynamic subclass discovery mapping
+            import inspect
+            sig = inspect.signature(strategy_class.__init__)
+            params = sig.parameters
+            kwargs = {}
+            if "k" in params:
+                kwargs["k"] = pol.rrf_k
+            if "alpha" in params:
+                kwargs["alpha"] = pol.bm25_weight
+            if "beta" in params:
+                kwargs["beta"] = pol.semantic_weight
+            if "threshold" in params:
+                kwargs["threshold"] = pol.graph_centric_threshold
+            if "bonus" in params:
+                kwargs["bonus"] = pol.graph_centric_bonus
+            if "trav_w" in params:
+                kwargs["trav_w"] = pol.traversal_weight
+            if "bm25_w" in params:
+                kwargs["bm25_w"] = pol.bm25_weight
+            if "sem_w" in params:
+                kwargs["sem_w"] = pol.semantic_weight
+            strategy_inst = strategy_class(**kwargs)
+        else:
+            strategy_inst = RRFStrategy(k=pol.rrf_k)
+
+        # Execute Strategy Scoring
+        scored_results = strategy_inst.score(query, candidates, active_rankings)
+        
+        # Unpack strategy scoring results
+        for res in scored_results:
+            c = res.candidate
+            c.final_score = res.final_score
+            # Attach explanation to chunk metadata
+            if c.chunk and getattr(c.chunk, "metadata", None) is not None:
+                c.chunk.metadata["ranking_explanation"] = res.explanation
+
+        # 6. Sort by strategy score
+        sorted_candidates = sorted(
+            candidates,
+            key=lambda cand: cand.final_score if cand.final_score is not None else -float("inf"),
+            reverse=True
+        )
+
+        # 7. Precision Reranking
+        if pol.enable_reranker and self.reranker_provider:
+            rerank_limit = min(pol.rerank_top_k, len(sorted_candidates))
+            to_rerank = sorted_candidates[:rerank_limit]
+            not_reranked = sorted_candidates[rerank_limit:]
+
+            reranked = self.reranker_provider.rerank(query, to_rerank)
             for c in reranked:
                 c.final_score = c.reranker_score
 
-            # Assign lower fallback score to non-reranked candidates maintaining RRF order
             min_reranker_score = min((c.reranker_score for c in reranked), default=0.0)
             for idx, c in enumerate(not_reranked):
                 c.reranker_score = None
@@ -98,14 +184,10 @@ class EvidenceRanker:
 
             result = sorted(
                 reranked + not_reranked,
-                key=lambda c: (c.final_score if c.final_score is not None else -float("inf"), c.id),
+                key=lambda c: c.final_score if c.final_score is not None else -float("inf"),
                 reverse=True
             )
         else:
-            # Set reciprocal RRF score as final_score
-            for idx, c in enumerate(fused):
-                c.reranker_score = None
-                c.final_score = c.rrf_score if c.rrf_score is not None else (1.0 / (idx + 1))
-            result = fused
+            result = sorted_candidates
 
         return result

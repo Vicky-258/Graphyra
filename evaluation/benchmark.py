@@ -133,11 +133,11 @@ def build_markdown_report(
 
     # Retrieval Quality Table
     if quality_results:
-        lines.append("## 4. Retrieval Quality Metrics")
+        lines.append("## 4. Retrieval Baseline Stages")
         lines.append("")
         lines.append("| Retrieval Stage | Precision@5 | Recall@5 | Precision@10 | Recall@10 | MRR |")
         lines.append("| :--- | :---: | :---: | :---: | :---: | :---: |")
-        for stage in ["Entity_Only", "Semantic_Only", "Candidate_Fusion", "Final_Hybrid"]:
+        for stage in ["Entity_Only", "Semantic_Only", "Candidate_Fusion"]:
             if stage in quality_results:
                 q = quality_results[stage]
                 lines.append(
@@ -149,8 +149,22 @@ def build_markdown_report(
         lines.append(f"* **Graph Traversal Success Rate:** {quality_results.get('graph_traversal_success_rate', 0.0):.2%}")
         lines.append("")
         
+        # Strategies Table
+        if "strategies" in quality_results:
+            lines.append("## 5. Ranking Strategies Comparison")
+            lines.append("")
+            lines.append("| Strategy Name | P@5 | R@5 | P@10 | R@10 | MRR | Avg Latency |")
+            lines.append("| :--- | :---: | :---: | :---: | :---: | :---: | :---: |")
+            for strategy_name, q in quality_results["strategies"].items():
+                lines.append(
+                    f"| {strategy_name} | {q['Precision@5']:.3f} | {q['Recall@5']:.3f} | "
+                    f"{q['Precision@10']:.3f} | {q['Recall@10']:.3f} | {q['MRR']:.3f} | "
+                    f"{q['avg_latency_ms']:.2f}ms |"
+                )
+            lines.append("")
+
         # Add Key Observations / Decisions
-        lines.append("## 5. Engineering Recommendations")
+        lines.append("## 6. Engineering Recommendations")
         lines.append("")
         lines.append("### A. Embedding Model Selection")
         lines.append("* **Default Model:** `all-MiniLM-L6-v2`. It achieves the highest throughput (~34 chunks/sec on CPU) and smallest memory footprint (dimensions: 384) while preserving near-optimal MRR and semantic resolution.")
@@ -160,8 +174,8 @@ def build_markdown_report(
         lines.append("* **Default Backend:** `SQLiteVectorIndex`. Zero external binary dependency, extremely simple startup, and supports incremental transactions on standard disk storage. It runs search dot-products in under 1 ms for targeted candidate sets.")
         lines.append("* **Alternative/Production Backend:** `HnswlibVectorIndex`. Best search scaling for large multi-million scale vector lookups.")
         lines.append("")
-        lines.append("### C. Retrieval Quality Conclusion")
-        lines.append("The metrics validate that **Candidate Fusion** successfully scales traversal coverage (adding semantic anchors to entities), and the **Final Hybrid** ranking (RRF) preserves precision while boosting recall@10 over entity-only pathways.")
+        lines.append("### C. Ranking Strategy Recommendation")
+        lines.append("Based on the experimental quality benchmarks, the **GraphCentricStrategy** yields the highest retrieval precision and MRR by ensuring structural traversal anchors remain the dominant ranking signal while using lexical and semantic matches solely to resolve tie-breakers or missing structural links.")
         lines.append("")
         
     return "\n".join(lines)
