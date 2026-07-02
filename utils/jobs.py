@@ -104,12 +104,24 @@ class JobManager:
                 os.remove(cache_file)
 
             job.progress = 10.0
-            job.message = "Connecting to Genshin Impact Wiki API..."
+            job.message = "Loading source crawler adapter..."
 
-            from graphyra_adapter_genshin.adapter import GenshinWikiAdapter
+            import importlib
+            adapter_class = None
+            try:
+                adapter_module = importlib.import_module("graphyra_adapter_genshin.adapter")
+                adapter_class = getattr(adapter_module, "GenshinWikiAdapter")
+            except (ImportError, AttributeError):
+                pass
+
+            if not adapter_class:
+                raise NotImplementedError(
+                    "No crawler adapter module is installed or configured in the system. "
+                    "Graphyra is running in standalone local repository mode."
+                )
+
             import threading
-            
-            adapter = GenshinWikiAdapter()
+            adapter = adapter_class()
             
             mode = adapter.crawler_config.get("mode", "full")
             seed_pages = adapter.crawler_config.get("seed_pages", [])
