@@ -89,3 +89,6 @@ doc_benchmark/
 
 # Evaluation reports output
 evaluation/reports/latest/
+
+# Local scratch files
+scratch/
