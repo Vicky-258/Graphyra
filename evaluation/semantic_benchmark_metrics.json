@@ -1,0 +1,9 @@
+{
+  "total_chunks": 7326,
+  "bootstrap_time_s": 12.684384107589722,
+  "index_build_time_s": 216.58968997001648,
+  "indexing_throughput_cps": 33.8243246989927,
+  "avg_search_ms": 114.17889595031738,
+  "avg_fusion_us": 0.8916854858398438,
+  "model_name": "all-MiniLM-L6-v2"
+}

@@ -1,0 +1,12 @@
+{
+  "avg_candidates": 410.8,
+  "avg_traversal_ms": 101.04303359985352,
+  "avg_retrieval_ms": 8.931732177734375,
+  "avg_bm25_ms": 25.38471221923828,
+  "avg_semantic_ms": 44.37899589538574,
+  "avg_fusion_ms": 0.5120277404785156,
+  "avg_rerank_ms": 124.84312057495117,
+  "avg_total_ms": 217.28553771972656,
+  "mem_delta_mb": 0.0,
+  "reranker_load_time_s": 21.31456184387207
+}
