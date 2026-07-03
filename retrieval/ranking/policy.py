@@ -13,7 +13,7 @@ class RankingPolicy:
     enable_semantic: bool = True
     enable_reranker: bool = False
     rrf_k: int = 60
-    strategy: str = "rrf"
+    strategy: str = "graph_centric"
     traversal_weight: float = 1.0
     bm25_weight: float = 0.15
     semantic_weight: float = 0.20
