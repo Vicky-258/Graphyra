@@ -73,38 +73,60 @@ Graphyra separates query resolution from downstream generation, ensuring that re
 
 ---
 
-## 🏗️ System Architecture
+## 🏗️ Modular Ecosystem Layout
 
-Graphyra is designed as a modular, backend-agnostic system. While it is currently configured with a default stack, each block remains replaceable:
+Graphyra is organized as a modular suite of companion projects grouped under the `Graphyra-Lib/` umbrella directory:
 
-* **Core Engine**: Orchestrates retrieval and handles BFS graph traversals.
-* **Storage Providers**: Decoupled from specific databases. Currently implemented using a thread-safe SQLite storage proxy mapping page databases.
-* **Vector Indexing**: Decoupled vector interface. Currently implemented using a standalone SQLite index database and a local Sentence Transformers embedding provider.
-* **Extractor Adapters**: Interfaces to crawler APIs. Currently configured for MediaWiki page-diff synchronization.
-* **Visualizer UI**: Matte dark query trace visualizer and diagnostics statistics dashboard.
+* **[Graphyra Core](docs/ECOSYSTEM.md)** (this repository): Contains the core search algorithms, BFS traversal policies, relational storage repositories, and semantic indexing engines.
+* **`Graphyra-Wrappers`**: Contains the REST API server (`server.py`), developer CLI tools (`query.py`, `trace_query.py`), and the interactive search trace dashboard UI.
+* **`Graphyra-Evaluation`**: Contains the regression testing suites, scaling benchmarks, traversal profiling scripts, and evaluation baseline metrics.
+* **`graphyra-adapter-genshin`**: Contains the crawler, HTML page parser, and exporter adapters connecting external wiki data sources to the Core ingestion pipeline.
 
 ---
 
-## 🛠️ Getting Started
+## 🛠️ Getting Started (Core Library)
 
-### 1. Database Seeding & CLI Trace
-To seed the database with the Sumeru lore corpus and run a CLI traversal reasoning trace:
+### 1. Installation & Environment Setup
+Graphyra Core uses `uv` for python environment and dependency resolution.
+
+Initialize the virtual environment:
 ```bash
-python main.py
+uv venv
 ```
 
-### 2. Standalone Semantic Indexing
-To generate real embeddings for all stored chunks using the active Sentence Transformer configuration:
+Install standard dependencies:
 ```bash
-python index_semantics.py
+uv pip install -e .
 ```
 
-### 3. Running the REST API Server & UI
-To start the local web backend server:
+### 2. Running Core Unit Tests
+Execute the pytest suite to verify retrieval engine sanity:
 ```bash
-python server.py
+PYTHONPATH=. uv run pytest
 ```
-Open `http://localhost:8000` to interact with the query trace storyboard, graph visualizers, and synchronization queues.
 
-### 4. Technical Documentation
-For complete API contracts, relational schemas, scoring formulas, and directory flows, check the [Technical Documentation Suite](docs/README.md).
+### 3. Launching Server, CLI, & Benchmarks
+To run user-facing apps or run benchmark metrics, switch to the sibling wrapper and evaluation directories:
+
+* **Start the REST Server & UI Dashboard** (in `Graphyra-Wrappers/`):
+  ```bash
+  PYTHONPATH=../Graphyra ../Graphyra/.venv/bin/python server.py
+  ```
+* **Run a Traversal Query Trace CLI** (in `Graphyra-Wrappers/`):
+  ```bash
+  PYTHONPATH=../Graphyra ../Graphyra/.venv/bin/python trace_query.py "Who is Venti?"
+  ```
+* **Run Traversal Engine Benchmarks** (in `Graphyra-Evaluation/`):
+  ```bash
+  PYTHONPATH=../Graphyra ../Graphyra/.venv/bin/python evaluation/run_traversal_experiments.py
+  ```
+
+---
+
+## 📖 Documentation Suite
+
+* [Ecosystem & Project Boundary Design Guide](docs/ECOSYSTEM.md)
+* [Search & Traversal Pipeline Architecture Reference](architecture.md)
+* [Relational Storage Schemas & Repository Pattern](docs/storage.md)
+* [Document Ingestion, Chunking, & Mention Extraction](docs/ingestion.md)
+

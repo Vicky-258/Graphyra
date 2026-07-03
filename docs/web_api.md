@@ -1,6 +1,6 @@
 # Web Server & REST APIs
 
-Graphyra's backend server is implemented in [server.py](file:///home/vicky/v_drive/Codes/Graphyra/server.py). It serves UI static assets, exposes HTTP REST API query endpoints, calculates coverage statistics, and coordinates asynchronous crawl jobs.
+Graphyra's backend server is implemented in `server.py` inside the sibling `Graphyra-Wrappers` project repository. It serves UI static assets, exposes HTTP REST API query endpoints, calculates coverage statistics, and coordinates asynchronous crawl jobs.
 
 ---
 
@@ -144,6 +144,6 @@ Wipes all database tables in `graphyra.db` and resets the SQLite vector database
 ## 2. Background Job Runner & Thread Pools
 
 To execute crawls without blocking main HTTP request threads:
-* **`JobRegistry` / `JobManager`**: Defined in [utils/jobs.py](file:///home/vicky/v_drive/Codes/Graphyra/utils/jobs.py). Coordinates a background thread pool containing worker threads.
+* **`JobRegistry` / `JobManager`**: Defined in [jobs.py](../graphyra/utils/jobs.py). Coordinates a background thread pool containing worker threads.
 * **Crawl Workers**: Scrape the wiki, parse DOM elements, build relational artifact tables inside `graphyra.db`, and trigger the bootstrapped semantic `EmbeddingIndexer` to sync vectors into `embeddings.db`.
 * **State Persistence**: Job objects reside in memory and update progress metrics dynamically (e.g. `0%` to `100%`), which are polled periodically by the browser client dashboard.

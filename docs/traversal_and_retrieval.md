@@ -6,7 +6,7 @@ The Traversal and Retrieval Subsystem executes BFS search across the entity-rela
 
 ## 1. BFS Traversal & Policy Constraints
 
-The BFS traversal loop is implemented in [traversal_engine.py](file:///home/vicky/v_drive/Codes/Graphyra/traversal_engine.py). It expands outwards from seed entity anchors up to configured policy thresholds:
+The BFS traversal loop is implemented in [traversal_engine.py](../graphyra/traversal_engine.py). It expands outwards from seed entity anchors up to configured policy thresholds:
 
 * **`max_depth`**: Hops limit from seed nodes (default `3`).
 * **`max_entities`**: Budget limit for visited nodes to prevent layout slowdowns (default `15`).
@@ -22,7 +22,7 @@ Graphyra evaluates the relevance of a path dynamically at each step of BFS expan
 $$\text{TraversalScore} = (\text{RelationWeight} \times \text{QueryRelevance} \times \text{EvidenceSupport}) - (\text{Depth} \times \text{DepthPenalty})$$
 
 ### Scoring Factors:
-1. **Relation Weight** ($w_{\text{relation}}$): Looked up from the `relation_weights` configuration map inside [TraversalPolicy](file:///home/vicky/v_drive/Codes/Graphyra/models/traversal_models.py):
+1. **Relation Weight** ($w_{\text{relation}}$): Looked up from the `relation_weights` configuration map inside [TraversalPolicy](../graphyra/models/traversal_models.py):
    * `"mentions"`: $1.0$
    * `"links_to"`: $0.8$
    * `"contains"`: $0.7$
@@ -42,7 +42,7 @@ Paths with a final score below `min_relevance` are discarded (pruned), and remai
 Once traversal completes, the retrieval engine resolves the visited nodes into evidence:
 
 ### 3.1 `EvidenceRetriever`
-Located in [storage/evidence_retriever.py](file:///home/vicky/v_drive/Codes/Graphyra/storage/evidence_retriever.py), it pulls chunks containing mentions of the visited entities, and wraps them in a list of **`CandidateEvidence` DTOs**:
+Located in [evidence_retriever.py](../graphyra/storage/evidence_retriever.py), it pulls chunks containing mentions of the visited entities, and wraps them in a list of **`CandidateEvidence` DTOs**:
 ```python
 @dataclass
 class CandidateEvidence:
@@ -57,7 +57,7 @@ class CandidateEvidence:
 ```
 
 ### 3.2 `SubgraphBuilder`
-Located in [subgraph_builder.py](file:///home/vicky/v_drive/Codes/Graphyra/subgraph_builder.py), it compiles the retrieved `CandidateEvidence` list, visited entities, traversed links, and matching paths into a single `ReasoningSubgraph` object. Exposes:
+Located in [subgraph_builder.py](../graphyra/subgraph_builder.py), it compiles the retrieved `CandidateEvidence` list, visited entities, traversed links, and matching paths into a single `ReasoningSubgraph` object. Exposes:
 * `extract()`: Creates the subgraph object.
 * `prune()`: Dynamically filters out low-scoring nodes and orphan chunk mentions.
 * `assemble()`: Serializes the final subgraph into a structured dictionary ready for browser visualization and LLM context prompt generation.

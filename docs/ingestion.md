@@ -6,7 +6,7 @@ The Ingestion Subsystem segments incoming documents, identifies entity occurrenc
 
 ## 1. Paragraph-First Chunking
 
-Rather than arbitrary sentence splitting, Graphyra uses a **Paragraph-First** chunking strategy defined in [ingestion/chunking.py](file:///home/vicky/v_drive/Codes/Graphyra/ingestion/chunking.py) under the `ChunkPolicy` class. 
+Rather than arbitrary sentence splitting, Graphyra uses a **Paragraph-First** chunking strategy defined in [chunking.py](../graphyra/ingestion/chunking.py) under the `ChunkPolicy` class. 
 
 ### Chunking Design Rules:
 1. **Paragraph Unity**: Paragraphs are treated as the atomic semantic unit. Split lines are grouped together until they reach a target length (default `500` characters).
@@ -50,7 +50,7 @@ Graphyra implements the Strategy Pattern to find entity names in text without co
 
 ## 3. Synonym Resolution & Redirects
 
-Synonyms and redirects are resolved dynamically during ingestion inside [ingestion/pipeline.py](file:///home/vicky/v_drive/Codes/Graphyra/ingestion/pipeline.py) and [storage/anchor_resolver.py](file:///home/vicky/v_drive/Codes/Graphyra/storage/anchor_resolver.py):
+Synonyms and redirects are resolved dynamically during ingestion inside [pipeline.py](../graphyra/ingestion/pipeline.py) and [anchor_resolver.py](../graphyra/storage/anchor_resolver.py):
 
 * **SYNONYM / REDIRECT Relations**: When an alias points to a primary entity, it is registered in the database `aliases` table. 
 * **Synonym Expansion**: If a synonym match is detected, the resolver maps it to the primary canonical entity, ensuring a single unified node representation in the knowledge graph.
@@ -60,7 +60,7 @@ Synonyms and redirects are resolved dynamically during ingestion inside [ingesti
 
 ## 4. Ingestion Builders
 
-The [ingestion/builders.py](file:///home/vicky/v_drive/Codes/Graphyra/ingestion/builders.py) module orchestrates model creation:
+The [builders.py](../graphyra/ingestion/builders.py) module orchestrates model creation:
 * `ArtifactBuilder`: Parses incoming `KnowledgeDocument` items, creates parent `Artifact` records, and runs the `ChunkPolicy` to yield database chunks.
 * `AnchorExtractor`: Iterates over created chunks, runs the active `MentionExtractor`, resolves names via `AnchorResolver`, and writes records to the `entity_mentions` table.
 * `RelationBuilder`: Analyzes hyperlinks and page references, writing structural link records into `artifact_links` and `relations`.

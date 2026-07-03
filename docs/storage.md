@@ -1,6 +1,6 @@
 # Storage Subsystem & Database Schemas
 
-Graphyra employs a relational-graph storage topology inside [storage/sqlite_storage.py](file:///home/vicky/v_drive/Codes/Graphyra/storage/sqlite_storage.py), using SQLite tables to store knowledge assets, connections, and metadata.
+Graphyra employs a relational-graph storage topology inside [sqlite_storage.py](../graphyra/storage/sqlite_storage.py), using SQLite tables to store knowledge assets, connections, and metadata.
 
 ---
 
@@ -67,5 +67,5 @@ To prevent threading access collisions across background sync jobs and async ser
 ## 3. Decoupled Repository Pattern
 
 All SQL statements are isolated from the query execution engines using repositories:
-* **`GraphRepository`**: Exposes the abstract graph interface. The concrete implementation [SQLiteGraphRepository](file:///home/vicky/v_drive/Codes/Graphyra/storage/graph_repository.py) runs query lookups to retrieve neighbor nodes (`get_neighbors(entity_id)`). This allows the traversal engine to remain completely database-agnostic.
+* **`GraphRepository`**: Exposes the abstract graph interface. The concrete implementation [SQLiteGraphRepository](../graphyra/storage/graph_repository.py) runs query lookups to retrieve neighbor nodes (`get_neighbors(entity_id)`). This allows the traversal engine to remain completely database-agnostic.
 * **Entity / Chunk Repositories**: Read and write entity records, chunk properties, and references through standard objects (`Entity`, `Chunk`, `Artifact`).

@@ -22,24 +22,26 @@ This documentation folder provides detailed breakdowns of all architectural subs
 ## Codebase Directory Structure
 
 ```text
-Graphyra/
-├── docs/                             # Project Technical Documentation
-├── ingestion/                        # Document segmentation & anchor extraction
-│   ├── chunking.py                   # Paragraph-first segment rules
-│   ├── mention_extractor.py          # Dictionary & Regex entity matchers
-│   └── pipeline.py                   # Ingestion orchestrator
-├── storage/                          # Relational SQLite persistence layer
-│   ├── sqlite_storage.py             # Schema definition & SQL connection proxies
-│   ├── graph_repository.py           # Graph connectivity repository
-│   └── chunk_repository.py           # Chunk read/write repository
-├── semantic/                         # Vector indexing & search package
-│   ├── providers/                    # sentence-transformers & mock adapters
-│   ├── index.py                      # Standalone SQLiteVectorIndex persistence
-│   ├── indexer.py                    # Sync indexer (incremental/rebuilds)
-│   └── fusion.py                     # Candidate fusion scoring
-├── graphyra_adapter_genshin/         # External wiki scraping adapter
-├── models/                           # Dataclasses & Type contracts
-├── engine.py                         # Graphyra DI query entrypoint
-├── server.py                         # Web backend, HTTP API, & Job runner
-└── tests/                            # Comprehensive unit test suites
+Graphyra/ (Core Repository)
+├── docs/                             # Technical Documentation Suite
+│   ├── ECOSYSTEM.md                  # Project boundaries & Guidelines
+│   ├── README.md                     # Registry index
+│   └── ...                           # Module guides
+├── graphyra/                         # Library Package Root
+│   ├── ingestion/                    # Paragraph segmentation & pipeline
+│   │   ├── crawler.py                # Domain-agnostic crawl orchestrator
+│   │   └── pipeline.py               # Ingestion orchestrator
+│   ├── interfaces/                   # Base adapter contracts & models
+│   ├── models/                       # Traversal models & type classes
+│   ├── retrieval/                    # Search & ranking strategies
+│   │   ├── ranking/                  # BM25, Semantic & Hybrid Rankers
+│   │   └── traversal/                # Traversal Policies
+│   ├── semantic/                     # Vector indexing & search package
+│   ├── storage/                      # Persistence SQLite layer (Repositories)
+│   ├── utils/                        # DB Seeder & Graph assemblers
+│   ├── engine.py                     # Main DI query resolver entrypoint
+│   ├── traversal_engine.py           # In-memory traversal BFS engine
+│   └── subgraph_builder.py           # Context subgraph constructor
+├── tests/                            # Core pytest unit tests suite
+└── pyproject.toml                    # Poetry/UV build dependency metadata
 ```

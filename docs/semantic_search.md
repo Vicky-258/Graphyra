@@ -31,7 +31,7 @@ Relational KB (graphyra.db)
 
 ## 2. Incremental Syncing & Model-Drift Recovery
 
-The indexing lifecycle is orchestrated by **`EmbeddingIndexer`** inside [semantic/indexer.py](file:///home/vicky/v_drive/Codes/Graphyra/semantic/indexer.py):
+The indexing lifecycle is orchestrated by **`EmbeddingIndexer`** inside [indexer.py](../graphyra/semantic/indexer.py):
 
 * **Incremental Syncing**: During pipeline crawlers, `index_chunks(chunk_list)` is called. It checks the index cached ID set and generates embeddings only for new or modified chunk IDs, avoiding expensive full scans.
 * **Model-Drift Verification**: When initialized, `verify_and_rebuild_if_needed()` compares the active model configuration (e.g. `all-MiniLM-L6-v2`) with the model name key stored in the index metadata table. 
@@ -39,9 +39,9 @@ The indexing lifecycle is orchestrated by **`EmbeddingIndexer`** inside [semanti
 
 ---
 
-## 3. Candidate Seed Fusion Engine
+## 3. Candidate Fusion Engine
 
-The query resolver executes keyword matching and semantic search in parallel. Results are fused using the **`CandidateFusionEngine`** inside [semantic/fusion.py](file:///home/vicky/v_drive/Codes/Graphyra/semantic/fusion.py):
+The query resolver executes keyword matching and semantic search in parallel. Results are fused using the **`CandidateFusionEngine`** inside [fusion.py](../graphyra/semantic/fusion.py):
 
 * **Direct Entity score**: Direct entity matches are scaled by `direct_match_weight` (default `1.0`).
 * **Semantic Entity score**: Semantic chunk matches are mapped to entities and scaled by `semantic_match_weight` (default `0.8`).
