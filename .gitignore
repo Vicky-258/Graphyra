@@ -92,3 +92,7 @@ evaluation/reports/latest/
 
 # Local scratch files
 scratch/
+
+# Retrieval Algorithm design docs and benchmarks
+Retrieval_Algo/
+retrieval_benchmark_comparison.json

@@ -127,3 +127,34 @@ class RelationRepository:
             )
             conn.commit()
             return cursor.rowcount > 0
+
+    def delete_by_node(self, node_id: str) -> bool:
+        """Delete all relations where the specified node is source or target."""
+        with self.storage.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM relations WHERE source_id = ? OR target_id = ?",
+                (node_id, node_id)
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def get_connected_nodes(self, node_id: str) -> list[str]:
+        with self.storage.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT source_id, target_id
+                FROM relations
+                WHERE source_id = ? OR target_id = ?
+                """,
+                (node_id, node_id)
+            )
+            rows = cursor.fetchall()
+            connected = set()
+            for src, tgt in rows:
+                if src == node_id:
+                    connected.add(tgt)
+                else:
+                    connected.add(src)
+            return list(connected)

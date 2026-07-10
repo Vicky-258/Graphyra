@@ -3,6 +3,7 @@ import datetime
 from typing import Optional, Set
 from graphyra.models.entity import Entity
 from graphyra.utils.entity_type import EntityType
+from graphyra.config.ingestion import DEFAULT_INGESTION_ENTITY_TYPE
 from graphyra.storage.entity_repository import EntityRepository
 from graphyra.storage.alias_manager import AliasManager
 from graphyra.storage.mention_repository import MentionRepository
@@ -26,7 +27,7 @@ class AnchorResolver:
         self,
         name: str,
         create_if_missing: bool = False,
-        default_type: EntityType = EntityType.CONCEPT
+        default_type: EntityType = None
     ) -> Optional[Entity]:
         """
         Resolves a name reference to an existing retrieval anchor (Entity).
@@ -37,6 +38,9 @@ class AnchorResolver:
         4. Case-insensitive lookup.
         5. If not found and create_if_missing is True, create a new anchor.
         """
+        if default_type is None:
+            default_type = DEFAULT_INGESTION_ENTITY_TYPE
+
         cleaned_name = " ".join(name.strip().split())
         if not cleaned_name:
             return None
@@ -119,14 +123,7 @@ class AnchorResolver:
 
         # --- 3. Relation Neighborhood similarity ---
         def get_neighbors(entity_id) -> Set[str]:
-            neighbors = set()
-            relations = self.relation_repo.list_all()
-            for rel in relations:
-                if rel.source_id == entity_id:
-                    neighbors.add(rel.target_id)
-                elif rel.target_id == entity_id:
-                    neighbors.add(rel.source_id)
-            return neighbors
+            return set(self.relation_repo.get_connected_nodes(entity_id))
 
         neighbors1 = get_neighbors(anchor_id_1)
         neighbors2 = get_neighbors(anchor_id_2)
@@ -231,19 +228,14 @@ class AnchorResolver:
         name = entity.canonical_name
         aliases = []
         
-        # 1. Handle parentheses: Kitsune (Species) -> Kitsune
+        # 1. Handle parentheses: Kitsune (Species) -> Kitsune (excluding disambiguation pages)
         if "(" in name and ")" in name:
-            simplified = re.sub(r'\(.*?\)', '', name).strip()
-            if simplified and simplified != name:
-                aliases.append(simplified)
+            if "disambiguation" not in name.lower():
+                simplified = re.sub(r'\(.*?\)', '', name).strip()
+                if simplified and simplified != name:
+                    aliases.append(simplified)
                 
-        # 2. Handle slashes: Vishap/Lore -> Vishap
-        if "/" in name:
-            simplified = name.split('/')[0].strip()
-            if simplified and simplified != name:
-                aliases.append(simplified)
-                
-        # 3. Handle double quotes: "Boatman" -> Boatman
+        # 2. Handle double quotes: "Boatman" -> Boatman
         if '"' in name:
             simplified = name.replace('"', '').strip()
             if simplified and simplified != name:

@@ -137,4 +137,32 @@ class ChunkRepository:
             )
             conn.commit()
 
+    def delete(self, chunk_id: str) -> bool:
+        """Delete a specific chunk by ID."""
+        with self.storage.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM chunks WHERE id = ?", (chunk_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def delete_by_artifact(self, artifact_id: str) -> bool:
+        """Delete all chunks belonging to a specific artifact."""
+        with self.storage.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM chunks WHERE artifact_id = ?", (artifact_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def update_metadata(self, chunk_id: str, metadata: dict) -> None:
+        """Updates the metadata field of a specific chunk."""
+        import json
+        with self.storage.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE chunks SET metadata = ? WHERE id = ?",
+                (json.dumps(metadata), chunk_id)
+            )
+            conn.commit()
+
+
 

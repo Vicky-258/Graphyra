@@ -50,3 +50,32 @@ class AliasManager:
                 return ent.canonical_name
 
         return cleaned_name
+
+    def list_all(self):
+        """Retrieve all aliases in bulk."""
+        return self.alias_repo.list_all()
+
+    def get_vocabulary(self) -> set[str]:
+        """Get the cached vocabulary of canonical names and aliases."""
+        if not hasattr(self, "_cached_vocab") or self._cached_vocab is None:
+            names = [e.canonical_name for e in self.entity_repo.list_all()]
+            aliases = [a.alias for a in self.list_all()]
+            self._cached_vocab = set(names + aliases)
+        return self._cached_vocab
+
+    def get_lookup_maps(self) -> tuple[dict[str, str], dict[str, list[str]]]:
+        """
+        Builds dual O(1) lookup maps:
+        - alias_to_entity: lowercase alias string -> entity ID
+        - entity_to_aliases: entity ID -> list of alias strings
+        """
+        all_aliases = self.list_all()
+        alias_to_entity = {}
+        entity_to_aliases = {}
+        for a in all_aliases:
+            if a.entity_id not in entity_to_aliases:
+                entity_to_aliases[a.entity_id] = []
+            entity_to_aliases[a.entity_id].append(a.alias)
+            alias_to_entity[a.alias.lower()] = a.entity_id
+        return alias_to_entity, entity_to_aliases
+

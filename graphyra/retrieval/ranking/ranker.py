@@ -34,6 +34,20 @@ class EvidenceRanker:
             return candidates
 
         pol = policy or RankingPolicy()
+        
+        # Extract query intent and calculate structural quality scores
+        from graphyra.retrieval.ranking.intent import QueryFeaturesExtractor
+        from graphyra.retrieval.ranking.structural_scorer import StructuralQualityScorer
+        
+        query_features = QueryFeaturesExtractor.extract_features(query)
+        sq_scorer = StructuralQualityScorer()
+        
+        for c in candidates:
+            features = {}
+            if hasattr(c, "chunk") and c.chunk and c.chunk.metadata:
+                features = c.chunk.metadata.get("features", {})
+            c.structural_quality_score = sq_scorer.calculate_score(features, query_features)
+
         active_rankings = []
 
         # 1. Structural Traversal Ranking
@@ -156,6 +170,11 @@ class EvidenceRanker:
         for res in scored_results:
             c = res.candidate
             c.final_score = res.final_score
+            
+            # Apply structural quality score multiplier
+            if hasattr(c, "structural_quality_score") and c.structural_quality_score is not None:
+                c.final_score *= c.structural_quality_score
+                
             # Attach explanation to chunk metadata
             if c.chunk and getattr(c.chunk, "metadata", None) is not None:
                 c.chunk.metadata["ranking_explanation"] = res.explanation

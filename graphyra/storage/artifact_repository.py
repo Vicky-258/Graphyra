@@ -109,3 +109,31 @@ class ArtifactRepository:
             )
             conn.commit()
             return cursor.rowcount > 0
+
+    def find_by_title(self, title: str) -> Artifact | None:
+        with self.storage.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id, title, source_type, source, metadata
+                FROM artifacts
+                WHERE title = ?
+                """,
+                (title,)
+            )
+            row = cursor.fetchone()
+            return self._row_to_artifact(row) if row else None
+
+    def find_by_entity_id(self, entity_id: str) -> Artifact | None:
+        with self.storage.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id, title, source_type, source, metadata
+                FROM artifacts
+                WHERE json_extract(metadata, '$.entity_id') = ?
+                """,
+                (entity_id,)
+            )
+            row = cursor.fetchone()
+            return self._row_to_artifact(row) if row else None

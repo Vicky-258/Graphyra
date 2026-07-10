@@ -10,6 +10,8 @@ from graphyra.ingestion.mention_extractor import DictionaryMentionExtractor
 from graphyra.interfaces.models import KnowledgeDocument, Section, ContentBlock, Reference
 
 
+from graphyra.plugins.registry import PluginRegistry
+
 @dataclass
 class JobInfo:
     id: str
@@ -52,7 +54,7 @@ class JobRegistry:
 class JobManager:
 
     @staticmethod
-    def submit_crawl_job(storage: SQLiteStorage) -> str:
+    def submit_crawl_job(storage: SQLiteStorage, adapter_class=None, adapter_instance=None) -> str:
         job_id = f"job_{uuid.uuid4().hex[:8]}"
         job = JobInfo(
             id=job_id,
@@ -66,7 +68,7 @@ class JobManager:
         # Spawn execution in a background thread
         thread = threading.Thread(
             target=JobManager._execute_crawl_job,
-            args=(job_id, storage)
+            args=(job_id, storage, adapter_class, adapter_instance)
         )
         thread.daemon = True
         thread.start()
@@ -74,7 +76,7 @@ class JobManager:
         return job_id
 
     @staticmethod
-    def _execute_crawl_job(job_id: str, storage: SQLiteStorage):
+    def _execute_crawl_job(job_id: str, storage: SQLiteStorage, adapter_class=None, adapter_instance=None):
         job = JobRegistry.get(job_id)
         if not job:
             return
@@ -85,43 +87,44 @@ class JobManager:
 
         try:
             # 1. Truncate all database tables (dump handcrafted pages)
-            with storage.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("DELETE FROM relations")
-                cursor.execute("DELETE FROM chunks")
-                cursor.execute("DELETE FROM artifacts")
-                cursor.execute("DELETE FROM entity_mentions")
-                cursor.execute("DELETE FROM aliases")
-                cursor.execute("DELETE FROM entities")
-                cursor.execute("DELETE FROM artifact_links")
-                cursor.execute("DELETE FROM evidence_references")
-                conn.commit()
+            if hasattr(storage, "truncate_all_tables"):
+                storage.truncate_all_tables()
 
-            # 2. Clear sync cache file
-            import os
-            cache_file = "genshin_crawl_cache.json"
-            if os.path.exists(cache_file):
-                os.remove(cache_file)
-
+            # 2. Resolve Crawler Adapter from inputs or Registry
             job.progress = 10.0
             job.message = "Loading source crawler adapter..."
 
-            import importlib
-            adapter_class = None
-            try:
-                adapter_module = importlib.import_module("graphyra_adapter_genshin.adapter")
-                adapter_class = getattr(adapter_module, "GenshinWikiAdapter")
-            except (ImportError, AttributeError):
-                pass
+            adapter = adapter_instance
+            if not adapter:
+                cls = adapter_class
+                if not cls:
+                    adapters = PluginRegistry.list_adapters()
+                    if adapters:
+                        cls = PluginRegistry.get_adapter(adapters[0])
+                if cls:
+                    adapter = cls()
+            
+            # Fallback dynamic runtime load for backward compatibility (avoids compile-time imports)
+            if not adapter:
+                try:
+                    import importlib
+                    module = importlib.import_module("graphyra_adapter_genshin.adapter")
+                    cls = getattr(module, "GenshinWikiAdapter")
+                    adapter = cls()
+                except Exception:
+                    pass
 
-            if not adapter_class:
+            if not adapter:
                 raise NotImplementedError(
                     "No crawler adapter module is installed or configured in the system. "
                     "Graphyra is running in standalone local repository mode."
                 )
 
-            import threading
-            adapter = adapter_class()
+            # Clear cache file associated with the adapter if possible
+            cache_file = getattr(adapter, "cache_file_path", "genshin_crawl_cache.json")
+            if cache_file and os.path.exists(cache_file):
+                os.remove(cache_file)
+
             
             mode = adapter.crawler_config.get("mode", "full")
             seed_pages = adapter.crawler_config.get("seed_pages", [])

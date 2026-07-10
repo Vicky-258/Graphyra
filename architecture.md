@@ -1,20 +1,19 @@
-# Graphyra Retrieval Architecture (V1.3 Frozen)
+# Graphyra Retrieval Architecture (V1.3 Stateful)
 
 This document provides a static reference architecture of the Graphyra retrieval engine pipeline. The system is designed to perform high-quality context retrieval by leveraging a heterogeneous knowledge graph (Entity ↔ Chunk ↔ Entity) combined with dense vector semantic search.
 
 ---
 
-## The 6 Stages of the Retrieval Pipeline
+## The 5 Stages of the Retrieval Pipeline
 
-The entire retrieval lifecycle is processed sequentially through 6 core stages:
+The entire retrieval lifecycle is processed sequentially through 5 core stages:
 
 ```mermaid
 graph TD
     A["1. Entity Detection (Lexical)"] --> C["3. Seed Fusion"]
     B["2. Semantic Candidate Discovery"] --> C
-    C --> D["4. Policy-Controlled Traversal"]
-    D --> E["5. Evidence Extraction"]
-    E --> F["6. Unified Multimodal Ranking"]
+    C --> D["4. Stateful Search & Path Traversal"]
+    D --> E["5. Unified Multimodal Ranking"]
 ```
 
 ---
@@ -31,7 +30,7 @@ graph TD
 * **Mechanism:** 
   1. Generates a dense query vector embedding via the configured `EmbeddingProvider`.
   2. Queries the Vector Index to retrieve the top $K$ semantically similar chunks.
-  3. Extract all entity mentions within these chunks using a vocabulary-aware Mention Extractor.
+  3. Extracts all entity mentions within these chunks using a vocabulary-aware Mention Extractor.
 * **Output:** A set of semantically matching entity node IDs with associated similarities.
 
 ---
@@ -43,25 +42,19 @@ graph TD
 
 ---
 
-### Stage 4: Policy-Controlled Traversal
-* **Objective:** Explore the heterogeneous graph (Entity → Chunk → Entity) starting from the seed anchors without frontier explosion.
+### Stage 4: Stateful Search & Path Traversal
+* **Objective:** Explore the heterogeneous graph (Entity → Chunk → Entity) starting from the seed anchors, selecting relevant evidence, and spawning path successor states.
 * **Mechanism:**
-  * Uses a modular **`ExpansionPolicy`** to select which adjacent edges/nodes to traverse.
-  * Employs BFS queue tracking that caps visited entities (`entity_budget`) and visited chunks (`chunk_budget`) independently.
-  * Explores up to `max_depth = 3` to allow navigating to neighboring entities.
-  * **Memory Optimization:** Graph adjacency maps and node types are warmed up in-memory at startup, ensuring **0 SQL query overhead** during BFS traversal.
-* **Output:** A `TraversalResult` containing visited nodes, unique traversed relations, and scored traversal paths.
+  * Uses a priority queue (Frontier heap) to manage search branches (`SearchState`).
+  * For each popped state, it generates neighbor candidates and evaluates their chunks globally.
+  * Computes a global **Expansion Context Baseline (ECB)** over the candidate chunks to dynamically filter out noise chunks.
+  * Chunks passing the threshold (`MRV - ECB > acceptance_margin`) are accepted as evidence, and their associated entities are queued as successor states on the Frontier.
+  * Employs strict budget boundaries (`entity_budget`, `chunk_budget`) to terminate early upon evidence saturation.
+* **Output:** A stateful `RetrievalResult` DTO mapping final accepted evidence chunks, traversed path trees, diagnostics, and metrics.
 
 ---
 
-### Stage 5: Evidence Extraction
-* **Objective:** Extract and bound the candidate chunk pool based on traversed nodes.
-* **Mechanism:** Extracts all chunk nodes explicitly visited by the traversal engine, bounding the candidate pool strictly to the traversed chunks to maintain relevance.
-* **Output:** Bounded list of `CandidateEvidence` objects.
-
----
-
-### Stage 6: Unified Multimodal Ranking
+### Stage 5: Unified Multimodal Ranking
 * **Objective:** Produce the final top-$N$ context chunks to feed the reasoning engine.
 * **Mechanism:**
   1. Computes structural traversal relevance scores.

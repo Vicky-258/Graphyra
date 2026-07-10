@@ -87,6 +87,26 @@ class SQLiteStorage(KnowledgeStorage):
         finally:
             conn._in_bulk = False
 
+    def analyze_database(self):
+        """Optimize SQLite indexing and statistics."""
+        with self.get_connection() as conn:
+            conn.execute("ANALYZE")
+            conn.commit()
+
+    def truncate_all_tables(self):
+        """Truncate all content tables to clear the database."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM relations")
+            cursor.execute("DELETE FROM chunks")
+            cursor.execute("DELETE FROM artifacts")
+            cursor.execute("DELETE FROM entity_mentions")
+            cursor.execute("DELETE FROM aliases")
+            cursor.execute("DELETE FROM entities")
+            cursor.execute("DELETE FROM artifact_links")
+            cursor.execute("DELETE FROM evidence_references")
+            conn.commit()
+
     def initialize_database(self):
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -247,6 +267,31 @@ class SQLiteStorage(KnowledgeStorage):
             cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_evidence_relation
             ON evidence_references(relation_id)
+            """)
+
+            cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_entities_canonical_name
+            ON entities(canonical_name)
+            """)
+
+            cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_aliases_alias
+            ON aliases(alias)
+            """)
+
+            cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_relations_source
+            ON relations(source_id)
+            """)
+
+            cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_relations_target
+            ON relations(target_id)
+            """)
+
+            cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_chunks_artifact
+            ON chunks(artifact_id)
             """)
 
             conn.commit()

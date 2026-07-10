@@ -11,7 +11,7 @@ The database contains the following structural tables:
 ### 1.1 `artifacts` (Pages / Source Documents)
 Stores the parent source files, titles, and crawler details.
 * `id` (TEXT PRIMARY KEY): Unique identifier (e.g. `ART_001`).
-* `title` (TEXT NOT NULL): Title of the page (e.g., `"Nahida"`).
+* `title` (TEXT NOT NULL): Title of the page (e.g., `"Main Document"`).
 * `source_type` (TEXT NOT NULL): Source origin type (e.g., `"wiki"`, `"pdf"`).
 * `source` (TEXT): File path or source URL.
 * `metadata` (TEXT): JSON string storing custom page metrics.
@@ -27,14 +27,14 @@ Stores segmented text paragraphs referencing their parent page.
 ### 1.3 `entities` (Retrieval Anchors)
 Stores canonical names and concepts extracted as graph nodes.
 * `id` (TEXT PRIMARY KEY): Unique identifier (e.g. `ENT_001`).
-* `canonical_name` (TEXT NOT NULL): Canonical anchor term (e.g. `"Irminsul"`).
+* `canonical_name` (TEXT NOT NULL): Canonical anchor term (e.g. `"Anchor Concept"`).
 * `entity_type` (TEXT NOT NULL): Entity category (e.g. `"PERSON"`, `"LOCATION"`, `"EVENT"`).
 * `metadata` (TEXT): JSON string.
 
 ### 1.4 `aliases` (Redirect Terms)
 Maps search queries and synonym redirects to canonical entities.
 * `entity_id` (TEXT NOT NULL): Foreign key referencing `entities(id)` on delete cascade.
-* `alias` (TEXT NOT NULL): Synonym or alternative name (e.g. `"Lesser Lord Kusanali"`).
+* `alias` (TEXT NOT NULL): Synonym or alternative name (e.g. `"Alternative Term"`).
 
 ### 1.5 `entity_mentions` (Provenance Indices)
 Intersection table mapping which chunks contain occurrences of entities.

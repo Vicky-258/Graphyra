@@ -28,7 +28,7 @@ KnowledgeDocument           <--- Interface boundary
    ├── Mention Extraction
    ├── Alias / Anchor Resolution
    ├── Relation / Link Construction
-   └── Traversal & Semantic Retrieval
+   └── Traversal & Stateful Semantic Retrieval
 ```
 
 ---
@@ -49,26 +49,26 @@ Graphyra operates on two distinct databases to keep knowledge graphs isolated fr
                +------------------+-------------------+
                |        web server (server.py)        |
                +--------+--------------------+--------+
-                        |                    |
-                        | Query              | Crawl & Sync Job
-                        v                    v
+                         |                    |
+                         | Query              | Crawl & Sync Job
+                         v                    v
                +--------+---------+  +-------+--------+
                |  Graphyra Engine |  | Ingestion      |
                |    (engine.py)   |  | Pipeline       |
                +---+-----------+--+  +-------+--------+
-                   |           |             |
-                   |           |             | Incremental Sync
-                   |           v             v
-                   |     +-----+-------------+----+
-                   |     |    EmbeddingIndexer    |
-                   |     +-----------+------------+
-                   |                 |
-                   v                 v
-          +--------+--------+  +-----+------------+
-          | Knowledge Graph |  |  SQLiteVector    |
-          |       DB        |  |     Index        |
-          |  (graphyra.db)  |  | (embeddings.db)  |
-          +-----------------+  +------------------+
+                    |           |             |
+                    |           |             | Incremental Sync
+                    |           v             v
+                    |     +-----+-------------+----+
+                    |     |    EmbeddingIndexer    |
+                    |     +-----------+------------+
+                    |                 |
+                    v                 v
+           +--------+--------+  +-----+------------+
+           | Knowledge Graph |  |  SQLiteVector    |
+           |       DB        |  |     Index        |
+           |  (graphyra.db)  |  | (embeddings.db)  |
+           +-----------------+  +------------------+
 ```
 
 ---
@@ -86,14 +86,14 @@ sequenceDiagram
     participant Sem as SQLiteVectorIndex (index.py)
     participant Fusion as CandidateFusionEngine (fusion.py)
     participant Trav as TraversalEngine (traversal_engine.py)
-    participant Evid as EvidenceRetriever (evidence_retriever.py)
-    participant Sub as SubgraphBuilder (subgraph_builder.py)
+    participant Retr as RetrievalEngine (retrieval_engine.py)
+    participant Rank as EvidenceRanker (ranker.py)
 
-    Client->>API: HTTP POST /api/query {"q": "Who is Nahida?"}
+    Client->>API: HTTP POST /api/query {"q": "Show connections for Entity A?"}
     API->>Core: retrieve(question)
     
     rect rgb(230, 245, 255)
-        note right of Core: Parallel Candidate Discovery (Day 6)
+        note right of Core: Parallel Candidate Discovery
         par Exact Entity Check
             Core->>Core: Match canonical names & aliases in text
         and Vector Semantic Lookup
@@ -107,15 +107,14 @@ sequenceDiagram
     Fusion-->>Core: List[Tuple[Entity, score]] (fused ranked seeds)
     
     Core->>Trav: traverse(TraversalRequest)
-    Note over Trav: BFS graph path search & scoring
-    Trav-->>Core: TraversalResult (visited_nodes, discovered_paths)
+    Trav->>Retr: search(query, seeds, policy)
+    Note over Retr: Stateful heap search guided by MRV & ECB
+    Retr-->>Trav: RetrievalState (global_accepted_chunks, traversal_paths)
+    Trav-->>Core: RetrievalResult (accepted_evidence, traversal_paths, diagnostics)
     
-    Core->>Evid: retrieve_evidence(TraversalResult)
-    Note over Evid: Wrap chunks in CandidateEvidence DTOs with path scores
-    Evid-->>Core: List[CandidateEvidence] (evidence pool)
-    
-    Core->>Sub: extract(TraversalResult, CandidateEvidence)
-    Sub-->>Core: ReasoningSubgraph
+    Core->>Rank: rank(query, RetrievalResult.accepted_evidence, policy)
+    Note over Rank: Sort evidence chunks by structural path & hybrid scores
+    Rank-->>Core: List[CandidateEvidence] (ranked final context list)
     
     Core-->>API: JSON payload {entities, chunks, paths}
     API-->>Client: HTTP 200 Response
@@ -135,5 +134,5 @@ Graphyra is intentionally optimized for reference-rich, interconnected corpora r
 
 | Suitability Class | Examples | Architectural Advantage |
 | :--- | :--- | :--- |
-| **Highly Suitable** | Wikis, API Reference Docs, Software Imports, Research Papers, Regulatory Statutes | **Maximal**: Path traversals resolve multi-hop links and explain evidence provenance step-by-step. |
+| **Highly Suitable** | Wikis, API Reference Docs, Software Imports, Research Papers, Regulatory Statutes | **Maximal**: Stateful path traversals resolve multi-hop links and explain evidence provenance step-by-step. |
 | **Less Suitable** | Random Chat Logs, Blog Feeds, News Snippets, Disjointed PDF catalogs | **Minimal**: Falls back to isolated keyword/semantic matches without relational benefit. |

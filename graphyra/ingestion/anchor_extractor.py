@@ -89,4 +89,4 @@ class AnchorExtractor:
 
     def resolve_aliases(self, term: str) -> Entity:
         """Resolves alias synonyms to their canonical entity anchor."""
-        return self.anchor_resolver.resolve(term, create_if_missing=True, default_type=EntityType.CONCEPT)
+        return self.anchor_resolver.resolve(term, create_if_missing=True)

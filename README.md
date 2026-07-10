@@ -1,10 +1,10 @@
 # Graphyra
 
-> **An entity-centric, graph-guided evidence retrieval engine that separates knowledge storage from graph navigation, enabling explainable multi-hop retrieval through structured traversal and evidence ranking.**
+> **An entity-centric, graph-guided retrieval engine that performs explainable multi-hop evidence retrieval through stateful search.**
 
 ---
 
-Graphyra is a graph-guided evidence retrieval engine designed for complex knowledge bases. Instead of retrieving isolated text chunks through vector similarity alone, Graphyra navigates structured relationships between entities, discovers connected evidence through graph traversal, and ranks supporting evidence before it reaches a downstream reasoning system.
+Graphyra is an entity-centric retrieval engine for interconnected knowledge bases. It combines semantic retrieval with graph-guided traversal to discover relevant evidence across multiple hops before passing structured context to downstream reasoning systems.
 
 ---
 
@@ -20,7 +20,7 @@ Graphyra is built around three core architectural tenets:
 
 ## 🎯 Suitability Profile
 
-Graphyra is designed for **interconnected knowledge** rather than isolated documents. Its retrieval model assumes that meaningful relationships exist—or can be extracted—between entities, documents, or other knowledge artifacts. The richer this reference structure, the more effectively Graphyra can perform multi-hop evidence discovery and explainable retrieval.
+Graphyra is designed for **interconnected knowledge** rather than isolated documents. Its retrieval model assumes that meaningful relationships exist—or can be extracted—between entities, documents, or other knowledge artifacts. The richer this reference structure, the more effectively Graphyra can perform stateful, multi-hop evidence discovery and explainable retrieval.
 
 ### Good Fit
 * **Wikis & Knowledge Bases** (e.g. MediaWiki, internal wikis) where pages explicitly link conceptually.
@@ -46,10 +46,10 @@ Graphyra separates query resolution from downstream generation, ensuring that re
       [ Entity Resolution ]  <─── Maps aliases/synonyms to canonical anchors
                 │
                 ▼
-       [ Graph Traversal ]   <─── BFS path-scoring over relations
+      [ Stateful Search ]    <─── Priority-driven heap search guided by MRV & ECB
                 │
                 ▼
-     [ Candidate Evidence ]  <─── Groups paragraph chunks along paths
+     [ Candidate Evidence ]  <─── Groups paragraph chunks along paths on the fly
                 │
                 ▼
       [ Evidence Ranking ]   <─── Ranks chunks by path & semantic scores
@@ -66,10 +66,10 @@ Graphyra separates query resolution from downstream generation, ensuring that re
 ## ⭐ Core Capabilities
 
 * **Entity Resolution** — Dynamically resolves aliases, synonyms, and redirect terms to stable retrieval anchors, preventing fragmented paths.
-* **Graph Traversal** — Explores connected entities using policy-controlled, weighted BFS paths to discover multi-hop relationships.
-* **Evidence Ranking** — Combines traversal scores, query relevance, and evidence support to rank and filter candidate evidence.
+* **Stateful Heap Search** — Explores connected entities using priority-driven search (e.g. Best-First Search) guided by Multi-hop Relevance Value (MRV) and Expansion Context Baseline (ECB) dynamic pruning to discover multi-hop relationships.
+* **Evidence Ranking** — Combines traversal priorities, query relevance, and evidence support to rank and filter candidate evidence.
 * **Incremental Ingestion** — Incrementally registers new artifacts, chunks, entities, and relations without needing to rebuild the entire knowledge base.
-* **Explainable Retrieval** — Every chunk of retrieved evidence can be traced back through its traversal path, hops, and source document, offering auditability.
+* **Explainable Retrieval** — Every chunk of retrieved evidence can be traced back through its concrete `TraversalPath`, hops, and source document, offering complete auditability.
 
 ---
 
@@ -77,7 +77,7 @@ Graphyra separates query resolution from downstream generation, ensuring that re
 
 Graphyra is organized as a modular suite of companion projects grouped under the `Graphyra-Lib/` umbrella directory:
 
-* **[Graphyra Core](docs/ECOSYSTEM.md)** (this repository): Contains the core search algorithms, BFS traversal policies, relational storage repositories, and semantic indexing engines.
+* **[Graphyra Core](docs/ECOSYSTEM.md)** (this repository): Contains the core search algorithms, priority policies, relational storage repositories, and semantic indexing engines.
 * **`Graphyra-Wrappers`**: Contains the REST API server (`server.py`), developer CLI tools (`query.py`, `trace_query.py`), and the interactive search trace dashboard UI.
 * **`Graphyra-Evaluation`**: Contains the regression testing suites, scaling benchmarks, traversal profiling scripts, and evaluation baseline metrics.
 * **`graphyra-adapter-genshin`**: Contains the crawler, HTML page parser, and exporter adapters connecting external wiki data sources to the Core ingestion pipeline.
@@ -129,4 +129,3 @@ To run user-facing apps or run benchmark metrics, switch to the sibling wrapper 
 * [Search & Traversal Pipeline Architecture Reference](architecture.md)
 * [Relational Storage Schemas & Repository Pattern](docs/storage.md)
 * [Document Ingestion, Chunking, & Mention Extraction](docs/ingestion.md)
-

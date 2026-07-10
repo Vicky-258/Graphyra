@@ -14,6 +14,8 @@ class ArtifactBuilder:
     def __init__(self, storage):
         self.storage = storage
         self.artifact_repo = ArtifactRepository(storage)
+        self.relation_repo = RelationRepository(storage)
+        self.chunk_repo = ChunkRepository(storage)
 
     def create_artifact(self, doc: KnowledgeDocument) -> Artifact:
         """
@@ -23,12 +25,9 @@ class ArtifactBuilder:
         # Overwrite existing artifact if it exists to maintain stable invariant
         self.artifact_repo.delete(doc.id)
 
-        # Clear associated chunks, relations, and mentions for this artifact to prevent leaks
-        with self.storage.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM relations WHERE source_id = ? OR target_id = ?", (doc.id, doc.id))
-            cursor.execute("DELETE FROM chunks WHERE artifact_id = ?", (doc.id,))
-            conn.commit()
+        # Clear associated chunks, relations, and mentions for this artifact to prevent leaks using repositories
+        self.relation_repo.delete_by_node(doc.id)
+        self.chunk_repo.delete_by_artifact(doc.id)
 
         # Create new artifact
         artifact = self.artifact_repo.create(
@@ -77,6 +76,7 @@ class ChunkBuilder:
         Segments sections of a document into retrieval-sized chunks using the paragraph-first strategy.
         """
         from graphyra.ingestion.chunking import ParagraphChunker
+        from graphyra.ingestion.features import ChunkFeatureExtractor
         chunker = ParagraphChunker()
         chunk_dicts = chunker.chunk_document(sections)
 
@@ -84,11 +84,15 @@ class ChunkBuilder:
         for c_dict in chunk_dicts:
             txt = c_dict["content"]
             sec_id = c_dict["section_id"]
+            
+            # Compute baseline structural features
+            features = ChunkFeatureExtractor.extract_features(txt, {"heading_depth": 0, "block_depth": 0})
+            
             # Create Chunk
             chunk = self.chunk_repo.create(
                 artifact_id=artifact_id,
                 content=txt,
-                metadata={"section_id": sec_id, "length": len(txt)}
+                metadata={"section_id": sec_id, "length": len(txt), "features": features.to_dict()}
             )
             chunks.append(chunk)
 
@@ -118,10 +122,8 @@ class IndexBuilder:
         """
         Builds SQLite indexing structures.
         """
-        with self.storage.get_connection() as conn:
-            # Create indexing structures or rebuild
-            conn.execute("ANALYZE")
-            conn.commit()
+        if hasattr(self.storage, "analyze_database"):
+            self.storage.analyze_database()
 
     def refresh_indexes(self):
         """

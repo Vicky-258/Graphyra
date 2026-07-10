@@ -32,6 +32,26 @@ class Graphyra:
         self.fusion_engine = fusion_engine
         self.evidence_ranker = evidence_ranker
 
+    def _to_candidate_evidence(self, retrieval_result, mention_repo) -> list:
+        from graphyra.models.traversal_models import CandidateEvidence
+        candidate_chunks = []
+        for chunk in retrieval_result.accepted_evidence:
+            score_info = next((s for s in retrieval_result.evidence_scores if s.chunk_id == chunk.id), None)
+            best_score = score_info.mrv if score_info else 1.0
+            
+            ent_ids = mention_repo.get_entities_for_chunk(chunk.id)
+            matching_paths = [p for p in retrieval_result.traversal_paths if p.target_entity in ent_ids]
+            min_depth = min((p.depth for p in matching_paths), default=1)
+            
+            candidate_chunks.append(CandidateEvidence(
+                chunk=chunk,
+                best_traversal_score=best_score,
+                min_depth=min_depth,
+                discovered_by=ent_ids,
+                paths=matching_paths
+            ))
+        return candidate_chunks
+
     def explore(self, entity_name: str, max_depth: int = 2) -> dict:
         """
         Explore the knowledge graph starting from the given entity name.
@@ -48,21 +68,12 @@ class Graphyra:
             }
 
         # 2. Resolve Entity to starting Artifact
-        start_artifact = None
-        artifacts = self.artifact_repo.list_all()
-        
         # Try metadata link first
-        for art in artifacts:
-            if art.metadata.get("entity_id") == entity.id:
-                start_artifact = art
-                break
-                
-        # Fallback to case-insensitive title match
+        start_artifact = self.artifact_repo.find_by_entity_id(entity.id)
+        
+        # Fallback to exact title match
         if not start_artifact:
-            for art in artifacts:
-                if art.title.lower() == entity.canonical_name.lower():
-                    start_artifact = art
-                    break
+            start_artifact = self.artifact_repo.find_by_title(entity.canonical_name)
 
         if not start_artifact:
             return {
@@ -77,8 +88,13 @@ class Graphyra:
         from graphyra.storage.mention_repository import MentionRepository
         mention_repo = MentionRepository(self.storage)
         
-        traversal_engine = TraversalEngine(graph_repo, self.entity_repo, mention_repo)
-        evidence_retriever = EvidenceRetriever(self.storage)
+        traversal_engine = TraversalEngine(
+            graph_repo,
+            self.entity_repo,
+            mention_repo,
+            embedding_engine=self.embedding_engine,
+            vector_index=self.vector_index
+        )
         
         policy = TraversalPolicy(max_depth=max_depth, enable_scoring=False)
         request = TraversalRequest(
@@ -88,17 +104,23 @@ class Graphyra:
         )
         
         traversal_result = traversal_engine.traverse(request)
-        chunks = evidence_retriever.retrieve_evidence(traversal_result)
+        chunks = self._to_candidate_evidence(traversal_result, mention_repo)
         
         # Resolve artifacts associated with traversed anchors
         visited_artifacts = []
         for ent_id in traversal_result.visited_nodes:
-            for art in artifacts:
-                # Handle case where the node in visited_nodes might be an artifact ID itself
-                if art.id == ent_id or art.metadata.get("entity_id") == ent_id or (self.entity_repo.get(ent_id) and art.title.lower() == self.entity_repo.get(ent_id).canonical_name.lower()):
-                    if art not in visited_artifacts:
-                        visited_artifacts.append(art)
-                    break
+            art = None
+            if ent_id.startswith("ART_"):
+                art = self.artifact_repo.get(ent_id)
+            else:
+                art = self.artifact_repo.find_by_entity_id(ent_id)
+                if not art:
+                    ent = self.entity_repo.get(ent_id)
+                    if ent:
+                        art = self.artifact_repo.find_by_title(ent.canonical_name)
+            
+            if art and art not in visited_artifacts:
+                visited_artifacts.append(art)
 
         # Filter out start page from connected pages list
         connected_titles = [
@@ -117,7 +139,7 @@ class Graphyra:
     def visualize(self, start_entity_name: str, target_entity_name: str | None = None):
         """
         Visualize a traversal path in vertical ASCII flowchart layout.
-        Defaults to demonstrating a key path (e.g. to 'Irminsul') or the longest path.
+        Defaults to demonstrating a key path or the longest path.
         """
         # 1. Resolve start entity
         entity = self.anchor_resolver.resolve(start_entity_name)
@@ -125,12 +147,9 @@ class Graphyra:
             print(f"Entity '{start_entity_name}' not found.")
             return
 
-        start_artifact = None
-        artifacts = self.artifact_repo.list_all()
-        for art in artifacts:
-            if art.metadata.get("entity_id") == entity.id or art.title.lower() == entity.canonical_name.lower():
-                start_artifact = art
-                break
+        start_artifact = self.artifact_repo.find_by_entity_id(entity.id)
+        if not start_artifact:
+            start_artifact = self.artifact_repo.find_by_title(entity.canonical_name)
 
         if not start_artifact:
             print(f"Artifact for entity '{start_entity_name}' not found.")
@@ -158,19 +177,13 @@ class Graphyra:
 
         # 3. Determine target entity for path tracing
         path = None
-        
-        # If no target specified, search for 'Irminsul' as a default high-value target in the Sumeru corpus
-        if not target_entity_name and start_entity_name.lower() == "nahida":
-            target_entity_name = "Irminsul"
 
         if target_entity_name:
             target_entity = self.anchor_resolver.resolve(target_entity_name)
             if target_entity:
-                target_art = None
-                for art in artifacts:
-                    if art.metadata.get("entity_id") == target_entity.id or art.title.lower() == target_entity.canonical_name.lower():
-                        target_art = art
-                        break
+                target_art = self.artifact_repo.find_by_entity_id(target_entity.id)
+                if not target_art:
+                    target_art = self.artifact_repo.find_by_title(target_entity.canonical_name)
                 if target_art and target_art.id in links_G:
                     if nx.has_path(links_G, start_artifact.id, target_art.id):
                         path = nx.shortest_path(links_G, start_artifact.id, target_art.id)
@@ -192,15 +205,7 @@ class Graphyra:
         # 4. Print the vertical ASCII flowchart
         for i, node_id in enumerate(path):
             title = G.nodes[node_id].get("title", node_id)
-            
-            # Clean up title for display to match user's format
-            display_title = title
-            if title == "Greater Lord Rukkhadevata":
-                display_title = "Rukkhadevata"
-            elif title == "Akasha System":
-                display_title = "Akasha"
-                
-            print(f"{display_title} Page")
+            print(f"{title} Page")
             if i < len(path) - 1:
                 print("       |")
                 print("       v")
@@ -224,11 +229,15 @@ class Graphyra:
         normalized_q = re.sub(r'[^\w\s]', ' ', question).lower()
         words = normalized_q.split()
         
+        # Preload alias maps in bulk to eliminate N+1 query loops
+        alias_to_entity, entity_to_aliases = self.alias_manager.get_lookup_maps()
+        
         detected_entities = []
         for e in entities:
             # Check canonical name and aliases
             names_to_check = [e.canonical_name.lower()]
-            names_to_check.extend([a.lower() for a in self.alias_manager.get_aliases(e.id)])
+            aliases_for_ent = entity_to_aliases.get(e.id, [])
+            names_to_check.extend([a.lower() for a in aliases_for_ent])
             
             for name_lower in names_to_check:
                 match = False
@@ -282,8 +291,13 @@ class Graphyra:
         from graphyra.storage.mention_repository import MentionRepository
         mention_repo = MentionRepository(self.storage)
         
-        traversal_engine = TraversalEngine(graph_repo, self.entity_repo, mention_repo)
-        evidence_retriever = EvidenceRetriever(self.storage)
+        traversal_engine = TraversalEngine(
+            graph_repo,
+            self.entity_repo,
+            mention_repo,
+            embedding_engine=self.embedding_engine,
+            vector_index=self.vector_index
+        )
         subgraph_builder = SubgraphBuilder(self.storage)
         
         policy = TraversalPolicy()
@@ -297,7 +311,7 @@ class Graphyra:
         traversal_result = traversal_engine.traverse(request)
         
         # 4. Evidence Retrieval
-        candidate_chunks = evidence_retriever.retrieve_evidence(traversal_result)
+        candidate_chunks = self._to_candidate_evidence(traversal_result, mention_repo)
         
         # 5. Evidence Ranking & Slicing
         if self.evidence_ranker:
@@ -319,7 +333,6 @@ class Graphyra:
         
         # 7. Retrieve all Artifacts associated with the chunks
         visited_artifacts = []
-        all_artifacts = self.artifact_repo.list_all()
         for c in selected_chunks:
             art = self.artifact_repo.get(c.artifact_id)
             if art and art not in visited_artifacts:
@@ -327,11 +340,11 @@ class Graphyra:
                 
         # Also ensure starting entity artifacts are included
         for e in detected_entities:
-            for art in all_artifacts:
-                if art.metadata.get("entity_id") == e.id or art.title.lower() == e.canonical_name.lower():
-                    if art not in visited_artifacts:
-                        visited_artifacts.append(art)
-                    break
+            art = self.artifact_repo.find_by_entity_id(e.id)
+            if not art:
+                art = self.artifact_repo.find_by_title(e.canonical_name)
+            if art and art not in visited_artifacts:
+                visited_artifacts.append(art)
 
         # 7. Convert heterogeneous path hops to artifact paths for the visualizer/UI
         ui_paths = []
@@ -407,20 +420,12 @@ class Graphyra:
             for art in result["artifacts"]:
                 if art.metadata.get("entity_id") == e.id or art.title.lower() == e.canonical_name.lower():
                     display_title = art.title
-                    if art.title == "Greater Lord Rukkhadevata":
-                        display_title = "Rukkhadevata"
-                    elif art.title == "Akasha System":
-                        display_title = "Akasha"
                     if display_title not in resolved_titles:
                         resolved_titles.append(display_title)
         
         if not resolved_titles:
             for art in result["artifacts"][:len(result["entities"])]:
                 display_title = art.title
-                if art.title == "Greater Lord Rukkhadevata":
-                    display_title = "Rukkhadevata"
-                elif art.title == "Akasha System":
-                    display_title = "Akasha"
                 resolved_titles.append(display_title)
                 
         for t in resolved_titles:
@@ -435,10 +440,6 @@ class Graphyra:
                 art_obj = self.artifact_repo.get(node_id)
                 title = art_obj.title if art_obj else node_id
                 display_title = title
-                if title == "Greater Lord Rukkhadevata":
-                    display_title = "Rukkhadevata"
-                elif title == "Akasha System":
-                    display_title = "Akasha"
                 print(f"{display_title} Page")
                 if i < len(path) - 1:
                     print("↓")

@@ -41,6 +41,19 @@ class IngestionPipeline:
             return self._ingest_core(documents, start_time, progress_callback)
 
     def _ingest_core(self, documents: List[KnowledgeDocument], start_time: datetime.datetime, progress_callback = None) -> dict:
+        from graphyra.interfaces.models import EntityStrategy, ArtifactStrategy, IngestionDirectives
+        
+        # Sort documents to ensure parent pages are processed before their subpages, preventing alias hijacking
+        documents = sorted(documents, key=lambda d: (d.title.count("/"), len(d.title)))
+
+        # Filter out ignored documents early
+        active_documents = []
+        for doc in documents:
+            dirs = doc.ingestion_directives or IngestionDirectives(entity_strategy=EntityStrategy.CREATE)
+            if dirs.artifact_strategy != ArtifactStrategy.IGNORE:
+                active_documents.append(doc)
+        documents = active_documents
+
         artifacts_created = 0
         chunks_created = 0
         relations_created = 0
@@ -60,20 +73,31 @@ class IngestionPipeline:
             self.artifact_builder.create_artifact(doc)
             artifacts_created += 1
             
-            # Auto-register canonical anchor for this page
-            existing_anchor = self.anchor_extractor.anchor_resolver.resolve(doc.title, create_if_missing=False)
-            if not existing_anchor:
-                anchor = self.anchor_extractor.anchor_resolver.resolve(
-                    doc.title,
-                    create_if_missing=True,
-                    default_type=EntityType.CONCEPT
-                )
-                anchors_resolved += 1
-            else:
-                anchor = existing_anchor
+            dirs = doc.ingestion_directives or IngestionDirectives(entity_strategy=EntityStrategy.CREATE)
+            strategy = dirs.entity_strategy
             
-            # Generate simplified aliases (e.g. Kitsune, Vishap)
-            self.anchor_extractor.anchor_resolver.generate_and_register_simplified_aliases(anchor)
+            if strategy == EntityStrategy.CREATE:
+                # Auto-register canonical anchor for this page
+                existing_anchor = self.anchor_extractor.anchor_resolver.resolve(doc.title, create_if_missing=False)
+                if not existing_anchor:
+                    anchor = self.anchor_extractor.anchor_resolver.resolve(
+                        doc.title,
+                        create_if_missing=True
+                    )
+                    anchors_resolved += 1
+                else:
+                    anchor = existing_anchor
+                
+                # Generate simplified aliases (e.g. Kitsune, Vishap)
+                self.anchor_extractor.anchor_resolver.generate_and_register_simplified_aliases(anchor)
+            elif strategy == EntityStrategy.LINK:
+                target = dirs.target_anchor
+                if target:
+                    # Resolve/Create the target anchor
+                    self.anchor_extractor.anchor_resolver.resolve(target, create_if_missing=True)
+            elif strategy == EntityStrategy.IGNORE:
+                # Create artifact only, do not create entity or resolve anything
+                pass
             
             if idx % 100 == 0 and idx > 0:
                 update_progress(70.0 + (idx / total_docs) * 5.0, f"Ingested {idx}/{total_docs} artifacts...")
@@ -113,18 +137,37 @@ class IngestionPipeline:
         
         # Dynamically refresh mention vocabulary from entities and aliases registered in DB
         if hasattr(self.mention_extractor, "set_known_terms"):
-            with self.storage.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT canonical_name FROM entities")
-                names = [row[0] for row in cursor.fetchall()]
-                cursor.execute("SELECT alias FROM aliases")
-                aliases = [row[0] for row in cursor.fetchall()]
-            self.mention_extractor.set_known_terms(set(names + aliases))
+            vocab = self.anchor_extractor.anchor_resolver.alias_manager.get_vocabulary()
+            self.mention_extractor.set_known_terms(vocab)
 
         new_anchors, total_mentions, new_relations = self.anchor_extractor.extract_anchors(all_chunks, progress_callback)
         anchors_resolved += new_anchors
         mentions_extracted += total_mentions
         relations_created += new_relations
+
+        # 4.5. Compute and update entity_density and link_density features in chunks database
+        for chunk in all_chunks:
+            # Count entity mentions from mention_repo
+            m_count = self.anchor_extractor.mention_repo.count_by_chunk(chunk.id)
+            
+            # Count section links from parent artifact references
+            parent_art = self.artifact_builder.artifact_repo.get(chunk.artifact_id)
+            l_count = 0
+            if parent_art and parent_art.metadata:
+                refs = parent_art.metadata.get("references", [])
+                sec_id = chunk.metadata.get("section_id", "")
+                for r in refs:
+                    if isinstance(r, dict) and r.get("source_anchor") == sec_id:
+                        l_count += 1
+            
+            features_dict = chunk.metadata.get("features", {})
+            tok_count = features_dict.get("token_count", 1)
+            
+            features_dict["entity_density"] = round(m_count / max(1, tok_count), 3)
+            features_dict["link_density"] = round(l_count / max(1, tok_count), 3)
+            
+            chunk.metadata["features"] = features_dict
+            self.chunk_builder.chunk_repo.update_metadata(chunk.id, chunk.metadata)
 
         # 5. Build/refresh search index structures
         update_progress(98.0, "Step 5/5: Rebuilding SQLite indexing and search structures...")

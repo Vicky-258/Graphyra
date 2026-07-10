@@ -9,10 +9,10 @@ The Ingestion Subsystem segments incoming documents, identifies entity occurrenc
 Rather than arbitrary sentence splitting, Graphyra uses a **Paragraph-First** chunking strategy defined in [chunking.py](../graphyra/ingestion/chunking.py) under the `ChunkPolicy` class. 
 
 ### Chunking Design Rules:
-1. **Paragraph Unity**: Paragraphs are treated as the atomic semantic unit. Split lines are grouped together until they reach a target length (default `500` characters).
+1. **Paragraph Unity**: Paragraphs are treated as the atomic semantic unit. Split lines are grouped together until they reach a target length (default `250` words).
 2. **Table Preservation**: Multi-row HTML tables (`<table>`) are grouped and extracted as a single, contiguous block so that row-wise context is not severed by splits.
 3. **Hard Bounds**: If a single paragraph is excessively long, it is split on sentence punctuation boundaries (`.`, `!`, `?`) using quote-aware regex.
-4. **Target Size**: A target chunk size of `500` characters is targeted, with a maximum chunk limit of `1000` characters.
+4. **Target Size**: A target chunk size of `250` words is targeted, with a maximum chunk limit of `400` words, and a minimum chunk size of `120` words.
 
 ### Key Classes:
 * `ChunkPolicy`: Holds parameters (target size, max size, chunk overlap) and exposes `split_text_by_paragraphs(text)` to produce content segments.

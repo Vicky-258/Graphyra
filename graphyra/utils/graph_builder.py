@@ -60,13 +60,9 @@ class GraphBuilder:
             G.add_edge(c.artifact_id, c.id, type="contains")
 
         # 3. Add Mentions Edges (Chunk -> Entity)
-        # Fetch mentions directly from table to do it in one pass
-        with self.storage.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT entity_id, chunk_id FROM entity_mentions")
-            mentions = cursor.fetchall()
-            for entity_id, chunk_id in mentions:
-                G.add_edge(chunk_id, entity_id, type="mentions")
+        mentions = self.mention_repo.list_all()
+        for entity_id, chunk_id in mentions:
+            G.add_edge(chunk_id, entity_id, type="mentions")
 
         # 4. Add Links Edges (Artifact -> Artifact)
         links = self.link_repo.list_all()

@@ -19,6 +19,13 @@ class GraphRepository(ABC):
         """
         pass
 
+    @abstractmethod
+    def get_all_degrees(self) -> dict[str, int]:
+        """
+        Precomputes and returns a dictionary of node degrees for all nodes in the relations table.
+        """
+        pass
+
 
 class SQLiteGraphRepository(GraphRepository):
 
@@ -69,6 +76,16 @@ class SQLiteGraphRepository(GraphRepository):
             self.warmed_up = True
         except Exception:
             pass
+
+    def get_all_degrees(self) -> dict[str, int]:
+        degrees = {}
+        with self.storage.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT source_id, target_id FROM relations")
+            for src, tgt in cursor.fetchall():
+                degrees[src] = degrees.get(src, 0) + 1
+                degrees[tgt] = degrees.get(tgt, 0) + 1
+        return degrees
 
     def _cache_node_type(self, node_id: str):
         if node_id not in self.node_type_cache:

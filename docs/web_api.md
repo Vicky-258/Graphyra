@@ -12,7 +12,7 @@ Executes entity/semantic seed discovery, BFS graph traversal, path scoring, and 
 * **Request Body (JSON)**:
   ```json
   {
-    "q": "Who is Nahida?",
+    "q": "Show connections for Entity A?",
     "max_depth": 2,
     "enable_scoring": true
   }
@@ -20,20 +20,20 @@ Executes entity/semantic seed discovery, BFS graph traversal, path scoring, and 
 * **Response Body (JSON)**:
   ```json
   {
-    "question": "Who is Nahida?",
+    "question": "Show connections for Entity A?",
     "entities": [
       {
         "id": "ENT_001",
-        "canonical_name": "Nahida",
-        "entity_type": "PERSON",
+        "canonical_name": "Entity A",
+        "entity_type": "CONCEPT",
         "metadata": {}
       }
     ],
     "seed_anchors": [
       {
         "id": "ENT_001",
-        "canonical_name": "Nahida",
-        "entity_type": "PERSON"
+        "canonical_name": "Entity A",
+        "entity_type": "CONCEPT"
       }
     ],
     "discovered_paths": [
@@ -41,7 +41,7 @@ Executes entity/semantic seed discovery, BFS graph traversal, path scoring, and 
         "seed": "ENT_001",
         "target": "ENT_002",
         "hops": ["ENT_001", "ENT_002"],
-        "relations": ["successor_of"],
+        "relations": ["links_to"],
         "score": 0.95,
         "depth": 1
       }
@@ -50,7 +50,7 @@ Executes entity/semantic seed discovery, BFS graph traversal, path scoring, and 
       {
         "id": "CHK_001",
         "artifact_id": "ART_001",
-        "content": "Nahida is the current Dendro Archon...",
+        "content": "Entity A is a canonical example of...",
         "metadata": {
           "best_traversal_score": 0.95,
           "min_depth": 1,

@@ -74,3 +74,10 @@ class AliasRepository:
             )
             rows = cursor.fetchall()
             return [row[0] for row in rows]
+
+    def list_all(self) -> list[Alias]:
+        with self.storage.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT entity_id, alias FROM aliases")
+            return [Alias(entity_id=row[0], alias=row[1]) for row in cursor.fetchall()]
+

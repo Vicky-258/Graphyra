@@ -94,6 +94,8 @@ class MentionRepository:
 
     def get_entities_for_chunk(self, chunk_id: str) -> list[str]:
         if self.use_cache:
+            if not self.warmed_up:
+                self.warm_up()
             return self.chunk_to_entities.get(chunk_id, [])
 
         self.sql_query_count += 1
@@ -109,3 +111,46 @@ class MentionRepository:
             )
             rows = cursor.fetchall()
             return [row[0] for row in rows]
+
+    def get_all_mentions_count(self) -> dict[str, int]:
+        if self.use_cache:
+            if not self.warmed_up:
+                self.warm_up()
+            return {ent_id: len(chunks) for ent_id, chunks in self.entity_to_chunks.items()}
+
+        self.sql_query_count += 1
+        with self.storage.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT entity_id, COUNT(chunk_id) FROM entity_mentions GROUP BY entity_id")
+            return {row[0]: row[1] for row in cursor.fetchall()}
+
+    def list_all(self) -> list[tuple[str, str]]:
+        """Get all (entity_id, chunk_id) mentions in bulk."""
+        if self.use_cache:
+            if not self.warmed_up:
+                self.warm_up()
+            mentions = []
+            for ent_id, chunk_ids in self.entity_to_chunks.items():
+                for cid in chunk_ids:
+                    mentions.append((ent_id, cid))
+            return mentions
+
+        self.sql_query_count += 1
+        with self.storage.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT entity_id, chunk_id FROM entity_mentions")
+            return cursor.fetchall()
+
+    def count_by_chunk(self, chunk_id: str) -> int:
+        """Count the number of entity mentions in a specific chunk."""
+        if self.use_cache:
+            if not self.warmed_up:
+                self.warm_up()
+            return len(self.chunk_to_entities.get(chunk_id, []))
+
+        self.sql_query_count += 1
+        with self.storage.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM entity_mentions WHERE chunk_id = ?", (chunk_id,))
+            return cursor.fetchone()[0]
+

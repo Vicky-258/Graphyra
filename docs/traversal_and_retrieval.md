@@ -1,63 +1,58 @@
-# Graph Traversal & Evidence Retrieval Subsystem
+# Stateful Search & Evidence Retrieval Subsystem
 
-The Traversal and Retrieval Subsystem executes BFS search across the entity-relation knowledge graph, ranks paths, extracts relevant paragraphs, and builds structured reasoning subgraphs.
-
----
-
-## 1. BFS Traversal & Policy Constraints
-
-The BFS traversal loop is implemented in [traversal_engine.py](../graphyra/traversal_engine.py). It expands outwards from seed entity anchors up to configured policy thresholds:
-
-* **`max_depth`**: Hops limit from seed nodes (default `3`).
-* **`max_entities`**: Budget limit for visited nodes to prevent layout slowdowns (default `15`).
-* **`min_relevance`**: Pruning threshold score (default `0.2`).
-* **`depth_penalty`**: Linear penalty score per hop to favor short paths (default `0.1`).
+The Stateful Search and Retrieval Subsystem executes query-guided priority search across the entity-relation knowledge graph, prunes irrelevant neighbors, extracts relevant paragraphs on the fly, and builds structured reasoning subgraphs.
 
 ---
 
-## 2. Dynamic Traversal Scoring Formula
+## 1. Stateful Search & Policy Constraints
 
-Graphyra evaluates the relevance of a path dynamically at each step of BFS expansion using the following formula:
+The stateful search loop is managed by `RetrievalEngine` (defined in [retrieval_engine.py](../graphyra/retrieval/retrieval_engine.py)). It expands outwards from seed entity anchors up to configured policy thresholds:
 
-$$\text{TraversalScore} = (\text{RelationWeight} \times \text{QueryRelevance} \times \text{EvidenceSupport}) - (\text{Depth} \times \text{DepthPenalty})$$
-
-### Scoring Factors:
-1. **Relation Weight** ($w_{\text{relation}}$): Looked up from the `relation_weights` configuration map inside [TraversalPolicy](../graphyra/models/traversal_models.py):
-   * `"mentions"`: $1.0$
-   * `"links_to"`: $0.8$
-   * `"contains"`: $0.7$
-   * `"similar_to"`: $0.4$
-2. **Query Relevance** ($r_{\text{query}}$): Checks matching overlaps between the user's search string and the target entity's name. Exposes a hook to switch from simple keyword overlap ($1.0$ if overlap, else $0.5$) to embedding cosine similarities in the future.
-3. **Evidence Support** ($s_{\text{evidence}}$): Computes the number of database text chunks referencing the target anchor:
-   $$\text{SupportFactor} = 1.0 + \min\left(1.0, \frac{\text{density\_count}}{5}\right)$$
-4. **Depth Penalty** ($d_{\text{penalty}}$): Subtracts points based on the distance from the query start node:
-   $$\text{Penalty} = \text{depth} \times \text{policy.depth_penalty}$$
-
-Paths with a final score below `min_relevance` are discarded (pruned), and remaining paths are ordered by `traversal_score` so that the most promising exploration paths are processed first.
+* **`max_depth`**: Hops limit from seed nodes (default `2`).
+* **`entity_budget`**: Global limit for visited entities to prevent exploration explosion (default `30`).
+* **`chunk_budget`**: Global limit for visited chunks during search (default `20`).
+* **`min_priority_threshold`**: Minimum state priority threshold. Path branches falling below this priority are pruned (default `0.1`).
+* **`consecutive_misses_limit`**: Stop traversal if search loops for $N$ steps without discovering new accepted chunks (default `5`).
 
 ---
 
-## 3. Evidence Extraction & Subgraphs
+## 2. Priority Propagation Formula
 
-Once traversal completes, the retrieval engine resolves the visited nodes into evidence:
+Graphyra evaluates the relevance of search states dynamically. The priority of a successor state ($S_{\text{child}}$) is propagated from its parent state using momentum decay weighting:
 
-### 3.1 `EvidenceRetriever`
-Located in [evidence_retriever.py](../graphyra/storage/evidence_retriever.py), it pulls chunks containing mentions of the visited entities, and wraps them in a list of **`CandidateEvidence` DTOs**:
+$$P_{\text{child}} = \alpha \cdot P_{\text{parent}} + (1 - \alpha) \cdot \left( \beta \cdot \text{MRV} + (1 - \beta) \cdot \text{EP} \right)$$
+
+### Parameters & Scoring Factors:
+1. **Momentum Alpha** ($\alpha$, default `0.7`): Decay factor scaling the weight of the parent's historical priority.
+2. **Expansion Beta** ($\beta$, default `0.2`): Balance weight between immediate relevance (MRV) and exploration potential (EP).
+3. **Multi-hop Relevance Value (MRV)**: A weighted combination of Query Alignment (QA), Context Continuity (CC), Novelty (NV), and Expansion Potential (EP) scores:
+   $$\text{MRV} = w_{\text{qa}} \cdot \text{QA} + w_{\text{cc}} \cdot \text{CC} + w_{\text{nv}} \cdot \text{NV} + w_{\text{ep}} \cdot \text{EP}$$
+4. **Expansion Potential (EP)**: Score representing how many new, unvisited entities are mentioned in the candidate chunk.
+
+---
+
+## 3. Expansion Context Baseline (ECB) Filtering
+
+To avoid budget saturation by irrelevant or long-tail connections (such as entities mentioned in only a single chunk), the engine performs a global evaluation over all candidate chunks at each expansion step:
+1. **Global Candidate Gathering:** Accumulates all chunks across all adjacent target entities.
+2. **ECB Calculation:** Computes the average MRV of the candidate set:
+   $$\text{ECB} = \frac{1}{|C|} \sum_{c \in C} \text{MRV}(c)$$
+3. **Marginal Gain Thresholding:** Only chunks satisfying the threshold are accepted as evidence and allowed to spawn successor states:
+   $$\text{MRV} - \text{ECB} > \text{acceptance\_margin}$$
+
+---
+
+## 4. Retrieval Result Data Transfer Object
+
+The coordinator `Graphyra.retrieve()` returns a structured DTO representing the retrieval outcome:
+
 ```python
 @dataclass
-class CandidateEvidence:
-    chunk: Chunk
-    best_traversal_score: float
-    min_depth: int
-    discovered_by: List[str]
-    paths: List[TraversalPath]
-    bm25_score: Optional[float] = None
-    semantic_score: Optional[float] = None
-    final_score: Optional[float] = None
+class RetrievalResult:
+    accepted_evidence: List[Chunk]       # Final evidence chunks selected
+    supporting_entities: List[str]      # Unique entities visited along the paths
+    traversal_paths: List[TraversalPath] # Path hops and relations traversed
+    evidence_scores: List[EvidenceScore] # Detailed priority and marginal gain metrics
+    statistics: RetrievalStatistics     # Execution counters (budget remaining, latency)
+    diagnostics: RetrievalDiagnostics   # Search loop details (spawned/explored/pruned states)
 ```
-
-### 3.2 `SubgraphBuilder`
-Located in [subgraph_builder.py](../graphyra/subgraph_builder.py), it compiles the retrieved `CandidateEvidence` list, visited entities, traversed links, and matching paths into a single `ReasoningSubgraph` object. Exposes:
-* `extract()`: Creates the subgraph object.
-* `prune()`: Dynamically filters out low-scoring nodes and orphan chunk mentions.
-* `assemble()`: Serializes the final subgraph into a structured dictionary ready for browser visualization and LLM context prompt generation.
